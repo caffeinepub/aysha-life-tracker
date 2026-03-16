@@ -1,0 +1,236 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "Playfair Display";
+  src: url("/assets/fonts/PlayfairDisplay-Variable.woff2") format("woff2");
+  font-weight: 400 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Figtree";
+  src: url("/assets/fonts/Figtree-Variable.woff2") format("woff2");
+  font-weight: 300 900;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    /* Warm parchment light theme */
+    --background: 0.97 0.012 75;
+    --foreground: 0.18 0.025 40;
+
+    --card: 0.995 0.006 75;
+    --card-foreground: 0.18 0.025 40;
+
+    --popover: 0.995 0.006 75;
+    --popover-foreground: 0.18 0.025 40;
+
+    /* Deep indigo primary */
+    --primary: 0.45 0.2 285;
+    --primary-foreground: 0.97 0.005 85;
+
+    --secondary: 0.94 0.018 75;
+    --secondary-foreground: 0.28 0.035 40;
+
+    --muted: 0.94 0.012 75;
+    --muted-foreground: 0.52 0.025 75;
+
+    /* Warm gold accent */
+    --accent: 0.78 0.13 80;
+    --accent-foreground: 0.18 0.025 40;
+
+    --destructive: 0.58 0.22 25;
+    --destructive-foreground: 0.97 0.004 85;
+
+    --border: 0.89 0.018 75;
+    --input: 0.89 0.018 75;
+    --ring: 0.45 0.2 285;
+
+    --radius: 0.875rem;
+
+    /* Chart colors */
+    --chart-1: 0.55 0.2 285;
+    --chart-2: 0.52 0.14 155;
+    --chart-3: 0.65 0.16 55;
+    --chart-4: 0.55 0.17 225;
+    --chart-5: 0.62 0.18 15;
+
+    /* Sidebar */
+    --sidebar: 0.98 0.008 75;
+    --sidebar-foreground: 0.18 0.025 40;
+    --sidebar-primary: 0.45 0.2 285;
+    --sidebar-primary-foreground: 0.97 0.005 85;
+    --sidebar-accent: 0.94 0.018 75;
+    --sidebar-accent-foreground: 0.28 0.035 40;
+    --sidebar-border: 0.89 0.018 75;
+    --sidebar-ring: 0.45 0.2 285;
+
+    /* Tab-specific color variables */
+    --spiritual-primary: 0.42 0.22 285;
+    --spiritual-accent: 0.75 0.16 80;
+    --spiritual-bg: 0.96 0.025 285;
+
+    --academics-primary: 0.42 0.14 155;
+    --academics-accent: 0.62 0.12 155;
+    --academics-bg: 0.96 0.018 155;
+
+    --career-primary: 0.55 0.18 50;
+    --career-accent: 0.72 0.16 55;
+    --career-bg: 0.97 0.02 60;
+
+    --daily-primary: 0.5 0.18 225;
+    --daily-accent: 0.65 0.15 225;
+    --daily-bg: 0.96 0.022 225;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply scroll-smooth;
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background-image: radial-gradient(
+        at 15% 15%,
+        oklch(0.9 0.04 285 / 0.12) 0px,
+        transparent 50%
+      ),
+      radial-gradient(at 85% 80%, oklch(0.9 0.04 55 / 0.1) 0px, transparent 50%),
+      radial-gradient(
+        at 50% 5%,
+        oklch(0.9 0.03 155 / 0.08) 0px,
+        transparent 40%
+      );
+    min-height: 100vh;
+  }
+}
+
+@layer utilities {
+  .spiritual-progress [data-slot="indicator"] {
+    background: linear-gradient(
+      90deg,
+      oklch(0.42 0.22 285),
+      oklch(0.75 0.16 80)
+    );
+  }
+  .academics-progress [data-slot="indicator"] {
+    background: linear-gradient(
+      90deg,
+      oklch(0.42 0.14 155),
+      oklch(0.62 0.12 155)
+    );
+  }
+  .career-progress [data-slot="indicator"] {
+    background: linear-gradient(90deg, oklch(0.55 0.18 50), oklch(0.72 0.16 55));
+  }
+  .daily-progress [data-slot="indicator"] {
+    background: linear-gradient(
+      90deg,
+      oklch(0.5 0.18 225),
+      oklch(0.65 0.15 225)
+    );
+  }
+
+  .tab-glow-spiritual:hover {
+    box-shadow: 0 0 16px oklch(0.42 0.22 285 / 0.25);
+  }
+  .tab-glow-academics:hover {
+    box-shadow: 0 0 16px oklch(0.42 0.14 155 / 0.25);
+  }
+  .tab-glow-career:hover {
+    box-shadow: 0 0 16px oklch(0.55 0.18 50 / 0.25);
+  }
+  .tab-glow-daily:hover {
+    box-shadow: 0 0 16px oklch(0.5 0.18 225 / 0.25);
+  }
+
+  .card-journal {
+    background: oklch(0.995 0.004 75 / 0.85);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 1px 3px oklch(0.18 0.025 40 / 0.06), 0 4px 16px
+      oklch(0.18 0.025 40 / 0.07), 0 0 0 1px oklch(0.88 0.02 75 / 0.6);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+  }
+
+  .card-journal:hover {
+    box-shadow: 0 2px 6px oklch(0.18 0.025 40 / 0.08), 0 8px 24px
+      oklch(0.18 0.025 40 / 0.1), 0 0 0 1px oklch(0.86 0.025 75 / 0.7);
+    transform: translateY(-1px);
+  }
+
+  .night-card {
+    background: linear-gradient(
+      145deg,
+      oklch(0.22 0.08 285 / 0.95),
+      oklch(0.18 0.06 290 / 0.95)
+    );
+    backdrop-filter: blur(16px);
+    box-shadow: 0 4px 24px oklch(0.15 0.1 285 / 0.4), 0 0 0 1px
+      oklch(0.4 0.12 285 / 0.3), inset 0 1px 0 oklch(0.55 0.15 80 / 0.15);
+  }
+
+  .star-field {
+    background: radial-gradient(
+        circle at 20% 30%,
+        oklch(0.75 0.16 80 / 0.08) 1px,
+        transparent 1px
+      ),
+      radial-gradient(
+        circle at 70% 20%,
+        oklch(0.75 0.16 80 / 0.06) 1px,
+        transparent 1px
+      ),
+      radial-gradient(
+        circle at 40% 70%,
+        oklch(0.75 0.16 80 / 0.05) 1px,
+        transparent 1px
+      ),
+      radial-gradient(
+        circle at 85% 60%,
+        oklch(0.75 0.16 80 / 0.07) 1px,
+        transparent 1px
+      ),
+      radial-gradient(
+        circle at 60% 85%,
+        oklch(0.75 0.16 80 / 0.04) 1px,
+        transparent 1px
+      );
+  }
+
+  .income-gradient {
+    background: linear-gradient(
+      135deg,
+      oklch(0.97 0.02 60),
+      oklch(0.94 0.04 50)
+    );
+    border: 1px solid oklch(0.82 0.06 55 / 0.4);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.75 0.025 75);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.6 0.035 75);
+}
+
+/* Progress bar base */
+[data-slot="progress"] > [data-slot="indicator"] {
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
