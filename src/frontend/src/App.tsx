@@ -13,9 +13,13 @@ import {
   Briefcase,
   CalendarDays,
   Moon,
+  Pencil,
   Plus,
   Sparkles,
+  Sun,
+  Target,
   Trash2,
+  Trophy,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -24,7 +28,7 @@ import type { CheckedItems, Task } from "./backend.d";
 
 const queryClient = new QueryClient();
 
-const MA_BOOKS = [
+const INIT_MA_BOOKS = [
   "English Language Teaching",
   "Indian Writing in English",
   "Chaucer → Elizabethan",
@@ -37,14 +41,14 @@ const MA_BOOKS = [
   "Research Skills",
 ];
 
-const CERTIFICATES = [
+const INIT_CERTIFICATES = [
   "TESOL Certificate",
   "Teaching English Online",
   "Educational Psychology",
   "Phonics Teaching",
 ];
 
-const RIYALAH = [
+const INIT_RIYALAH = [
   "Tahajjud",
   "Fajr Adhkar",
   "Qur'an",
@@ -53,7 +57,7 @@ const RIYALAH = [
   "Kitab Reading",
 ];
 
-const NET_PREP = [
+const INIT_NET_PREP = [
   "Literary Terms",
   "Literary Theory",
   "NET PYQs",
@@ -61,9 +65,31 @@ const NET_PREP = [
   "Revision",
 ];
 
-const STUDENTS = ["Naithan", "Theo", "Serah", "New Student 1", "New Student 2"];
+const INIT_STUDENTS = [
+  "Naithan",
+  "Theo",
+  "Serah",
+  "New Student 1",
+  "New Student 2",
+];
 
 const INCOME_GOAL = 15000;
+
+const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+const REMINDER_QUOTES = [
+  "Discipline is choosing between what you want now and what you want most.",
+  "Small steps every day lead to big results over time.",
+  "You don't have to be great to start, but you have to start to be great.",
+  "The secret of getting ahead is getting started.",
+  "Success is the sum of small efforts repeated day in and day out.",
+];
+
+const DEFAULT_EXAM_DATE = (() => {
+  const d = new Date();
+  d.setDate(d.getDate() + 90);
+  return d.toISOString().slice(0, 10);
+})();
 
 // Circular SVG progress ring
 function CircularRing({
@@ -274,6 +300,17 @@ function PomodoroRing({
 function AppContent() {
   const { actor, isFetching } = useActor();
 
+  const [maBooks, setMaBooks] = useState<string[]>(INIT_MA_BOOKS);
+  const [certificates, setCertificates] = useState<string[]>(INIT_CERTIFICATES);
+  const [riyalah, setRiyalah] = useState<string[]>(INIT_RIYALAH);
+  const [netPrep, setNetPrep] = useState<string[]>(INIT_NET_PREP);
+  const [students, setStudents] = useState<string[]>(INIT_STUDENTS);
+  const [editingItem, setEditingItem] = useState<{
+    section: string;
+    index: number;
+    value: string;
+  } | null>(null);
+
   const [checkedItems, setCheckedItems] = useState<CheckedItems>({
     mABooks: [],
     certificates: [],
@@ -289,6 +326,140 @@ function AppContent() {
   const [incomeEntryAmount, setIncomeEntryAmount] = useState("");
   const [dailyTasks, setDailyTasks] = useState<Task[]>([]);
   const [taskInput, setTaskInput] = useState("");
+
+  // Riyalah streak state (localStorage persisted)
+  const [riyalahStreak, setRiyalahStreak] = useState<number>(() => {
+    const saved = localStorage.getItem("riyalah_streak");
+    return saved ? Number(saved) : 0;
+  });
+  const [lastStreakDate, setLastStreakDate] = useState<string>(() => {
+    return localStorage.getItem("riyalah_streak_date") ?? "";
+  });
+
+  // Student session/notes state
+  const [studentSessions, setStudentSessions] = useState<
+    Record<string, number>
+  >({});
+  const [studentNotes, setStudentNotes] = useState<Record<string, string>>({});
+
+  // Daily goals state
+  const [dailyGoals, setDailyGoals] = useState<
+    { id: string; text: string; done: boolean }[]
+  >(() => {
+    try {
+      const saved = localStorage.getItem("daily_goals");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [goalInput, setGoalInput] = useState("");
+
+  // Dark mode
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    return localStorage.getItem("dark_mode") === "true";
+  });
+
+  // MA Exam Countdown
+  const [examDate, setExamDate] = useState<string>(() => {
+    return localStorage.getItem("exam_date") ?? DEFAULT_EXAM_DATE;
+  });
+  const [editingExamDate, setEditingExamDate] = useState(false);
+
+  // Today's Reminder
+  const [reminderIdx, setReminderIdx] = useState(0);
+  const [customReminder, setCustomReminder] = useState<string>(() => {
+    return localStorage.getItem("custom_reminder") ?? "";
+  });
+  const [editingReminder, setEditingReminder] = useState(false);
+
+  // Today's Focus
+  const [focusItems, setFocusItems] = useState<
+    { label: string; detail: string; done: boolean }[]
+  >(() => {
+    try {
+      const saved = localStorage.getItem("focus_items");
+      return saved
+        ? JSON.parse(saved)
+        : [
+            {
+              label: "Study",
+              detail: "Shakespeare Studies (30 min)",
+              done: false,
+            },
+            { label: "Riyalah", detail: "3/6 done", done: false },
+            { label: "Career", detail: "Finish TESOL lesson", done: false },
+            { label: "Tuition", detail: "Theo writing practice", done: false },
+          ];
+    } catch {
+      return [];
+    }
+  });
+  const [focusInput, setFocusInput] = useState("");
+  const [focusDetailInput, setFocusDetailInput] = useState("");
+
+  // Study Hours This Week
+  const [weeklyHours, setWeeklyHours] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem("weekly_hours");
+      return saved
+        ? JSON.parse(saved)
+        : { Mon: 2, Tue: 1, Wed: 2, Thu: 3, Fri: 0, Sat: 0, Sun: 0 };
+    } catch {
+      return { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
+    }
+  });
+  const [addMinutesInput, setAddMinutesInput] = useState("");
+
+  // Riyalah Longest Streak
+  const [riyalahLongest, setRiyalahLongest] = useState<number>(() => {
+    return Number(localStorage.getItem("riyalah_longest") ?? 0);
+  });
+
+  // Today's 3 Wins
+  const [wins, setWins] = useState<{ label: string; done: boolean }[]>(() => {
+    try {
+      const saved = localStorage.getItem("today_wins");
+      return saved
+        ? JSON.parse(saved)
+        : [
+            { label: "Study MA", done: false },
+            { label: "Complete Riyalah", done: false },
+            { label: "Work on certificate", done: false },
+          ];
+    } catch {
+      return [
+        { label: "Study MA", done: false },
+        { label: "Complete Riyalah", done: false },
+        { label: "Work on certificate", done: false },
+      ];
+    }
+  });
+  const [editingWinIdx, setEditingWinIdx] = useState<number | null>(null);
+  const [editingWinLabel, setEditingWinLabel] = useState("");
+
+  // MA Book Progress (individual %)
+  const [_maBookProgress, _setMaBookProgress] = useState<
+    Record<string, number>
+  >(() => {
+    try {
+      const saved = localStorage.getItem("ma_book_progress");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [_editingBookProgress, _setEditingBookProgress] = useState<
+    number | null
+  >(null);
+  const [_bookProgressInput, _setBookProgressInput] = useState("");
+
+  // Student Target
+  const [_studentTarget, _setStudentTarget] = useState<number>(() => {
+    return Number(localStorage.getItem("student_target") ?? 5);
+  });
+  const [_editingStudentTarget, _setEditingStudentTarget] = useState(false);
+  const [_studentTargetInput, _setStudentTargetInput] = useState("");
 
   // Timer state (not persisted)
   const [time, setTime] = useState(1500);
@@ -374,6 +545,36 @@ function AppContent() {
     });
   }, []);
 
+  const renameItem = useCallback(
+    (
+      _section: string,
+      index: number,
+      newName: string,
+      setter: React.Dispatch<React.SetStateAction<string[]>>,
+      checkedKey: keyof CheckedItems,
+      oldName: string,
+    ) => {
+      if (!newName.trim() || newName === oldName) return;
+      setter((prev) => {
+        const next = [...prev];
+        next[index] = newName.trim();
+        return next;
+      });
+      setCheckedItems((prev) => {
+        const list = prev[checkedKey];
+        if (list.includes(oldName)) {
+          return {
+            ...prev,
+            [checkedKey]: list.map((x) => (x === oldName ? newName.trim() : x)),
+          };
+        }
+        return prev;
+      });
+      setEditingItem(null);
+    },
+    [],
+  );
+
   const addTask = () => {
     if (!taskInput.trim()) return;
     setDailyTasks((prev) => [
@@ -421,23 +622,145 @@ function AppContent() {
     });
   };
 
+  // Save daily goals to localStorage
+  const saveDailyGoals = (
+    goals: { id: string; text: string; done: boolean }[],
+  ) => {
+    localStorage.setItem("daily_goals", JSON.stringify(goals));
+    setDailyGoals(goals);
+  };
+
+  const addDailyGoal = () => {
+    if (!goalInput.trim()) return;
+    const newGoals = [
+      ...dailyGoals,
+      { id: crypto.randomUUID(), text: goalInput.trim(), done: false },
+    ];
+    saveDailyGoals(newGoals);
+    setGoalInput("");
+  };
+
+  const toggleDailyGoal = (id: string) => {
+    saveDailyGoals(
+      dailyGoals.map((g) => (g.id === id ? { ...g, done: !g.done } : g)),
+    );
+  };
+
+  const deleteDailyGoal = (id: string) => {
+    saveDailyGoals(dailyGoals.filter((g) => g.id !== id));
+  };
+
+  const handleMarkStreakToday = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const allChecked = riyalah.every((item) =>
+      checkedItems.riyalah.includes(item),
+    );
+    if (lastStreakDate === today) {
+      toast.info("Already marked for today!");
+      return;
+    }
+    if (!allChecked) {
+      const remaining = riyalah.filter(
+        (item) => !checkedItems.riyalah.includes(item),
+      ).length;
+      toast.warning(
+        `Complete all Riyalah items first (${remaining} remaining)`,
+      );
+      return;
+    }
+    const newStreak = riyalahStreak + 1;
+    handleStreakUpdate(newStreak);
+    setLastStreakDate(today);
+    localStorage.setItem("riyalah_streak_date", today);
+    toast.success(`🔥 ${newStreak} day streak! Keep it up!`);
+  };
+
+  // Dark mode toggle
+  const toggleDarkMode = () => {
+    setDarkMode((prev) => {
+      const next = !prev;
+      localStorage.setItem("dark_mode", String(next));
+      return next;
+    });
+  };
+
+  // Exam countdown
+  const daysUntilExam = (() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const exam = new Date(examDate);
+    exam.setHours(0, 0, 0, 0);
+    return Math.max(
+      0,
+      Math.round((exam.getTime() - today.getTime()) / 86400000),
+    );
+  })();
+
+  // Today's day key
+  const todayDayKey =
+    DAYS_OF_WEEK[new Date().getDay() === 0 ? 6 : new Date().getDay() - 1];
+
+  const totalWeeklyHours = Object.values(weeklyHours).reduce(
+    (a, b) => a + b,
+    0,
+  );
+
+  const addStudyMinutes = () => {
+    const mins = Number(addMinutesInput);
+    if (!mins || mins <= 0) return;
+    setWeeklyHours((prev) => {
+      const next = {
+        ...prev,
+        [todayDayKey]: (prev[todayDayKey] || 0) + mins / 60,
+      };
+      localStorage.setItem("weekly_hours", JSON.stringify(next));
+      return next;
+    });
+    setAddMinutesInput("");
+    toast.success(`+${mins} minutes added to today's study hours`);
+  };
+
+  const saveFocusItems = (items: typeof focusItems) => {
+    setFocusItems(items);
+    localStorage.setItem("focus_items", JSON.stringify(items));
+  };
+
+  const saveWins = (newWins: typeof wins) => {
+    setWins(newWins);
+    localStorage.setItem("today_wins", JSON.stringify(newWins));
+  };
+
+  const handleStreakUpdate = (newStreak: number) => {
+    setRiyalahStreak(newStreak);
+    if (newStreak > riyalahLongest) {
+      setRiyalahLongest(newStreak);
+      localStorage.setItem("riyalah_longest", String(newStreak));
+    }
+    localStorage.setItem("riyalah_streak", String(newStreak));
+  };
+
+  const currentReminder = customReminder || REMINDER_QUOTES[reminderIdx];
+
+  const booksCompletedCount = checkedItems.mABooks.length;
+  const tasksCompletedCount = dailyTasks.filter((t) => t.done).length;
+
   const pct = (done: number, total: number) =>
     total === 0 ? 0 : Math.round((done / total) * 100);
 
-  const riyalahPct = pct(checkedItems.riyalah.length, RIYALAH.length);
+  const riyalahPct = pct(checkedItems.riyalah.length, riyalah.length);
   const incomeGoalPct = Math.min(
     100,
     Math.round((monthlyIncome / INCOME_GOAL) * 100),
   );
 
   // Spiritual tab checklist items
-  const spiritualChecklistItems = RIYALAH.map((item, i) => {
+  const spiritualChecklistItems = riyalah.map((item, i) => {
     const emojis = ["🌙", "🌅", "📖", "🤲", "☪️", "📚"];
     return { label: item, emoji: emojis[i] };
   });
 
   return (
-    <div className="min-h-screen">
+    <div className={`min-h-screen${darkMode ? " dark" : ""}`}>
       {/* Header */}
       <header className="relative overflow-hidden">
         <div
@@ -493,6 +816,28 @@ function AppContent() {
             </p>
           </motion.div>
 
+          {/* Dark mode toggle */}
+          <div className="absolute top-4 right-4">
+            <button
+              type="button"
+              data-ocid="header.dark_mode.toggle"
+              onClick={toggleDarkMode}
+              className="p-2 rounded-full transition-all"
+              style={{
+                background: "oklch(1 0 0 / 0.12)",
+                border: "1px solid oklch(1 0 0 / 0.2)",
+                color: "oklch(0.92 0.1 80)",
+              }}
+              aria-label="Toggle dark mode"
+            >
+              {darkMode ? (
+                <Sun className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5" />
+              )}
+            </button>
+          </div>
+
           {/* Quick stats bar */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -503,17 +848,17 @@ function AppContent() {
             {[
               {
                 label: "Riyalah",
-                value: `${checkedItems.riyalah.length}/${RIYALAH.length}`,
+                value: `${checkedItems.riyalah.length}/${riyalah.length}`,
                 color: "oklch(0.75 0.16 80)",
               },
               {
                 label: "MA Books",
-                value: `${checkedItems.mABooks.length}/${MA_BOOKS.length}`,
+                value: `${checkedItems.mABooks.length}/${maBooks.length}`,
                 color: "oklch(0.7 0.12 155)",
               },
               {
                 label: "Students",
-                value: `${checkedItems.students.length}/${STUDENTS.length}`,
+                value: `${checkedItems.students.length}/${students.length}`,
                 color: "oklch(0.8 0.14 55)",
               },
               {
@@ -543,6 +888,678 @@ function AppContent() {
 
       {/* Main content */}
       <main className="container mx-auto px-4 py-8 max-w-5xl">
+        {/* ──────────────── MA EXAM COUNTDOWN ──────────────── */}
+        <div
+          data-ocid="exam_countdown.card"
+          className="rounded-2xl p-5 mb-6 text-center relative overflow-hidden"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.22 0.14 285 / 0.95) 0%, oklch(0.32 0.12 230) 50%, oklch(0.42 0.1 200) 100%)",
+            border: "1px solid oklch(0.5 0.12 285 / 0.3)",
+            boxShadow: "0 8px 32px oklch(0.12 0.1 285 / 0.4)",
+          }}
+        >
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <span className="text-xl">🎓</span>
+            <span
+              className="font-display text-lg font-bold"
+              style={{ color: "oklch(0.88 0.1 80)" }}
+            >
+              MA Exam Countdown
+            </span>
+          </div>
+          {!editingExamDate ? (
+            <div className="flex flex-col items-center gap-1">
+              <span
+                className="font-display text-5xl font-bold"
+                style={{ color: "oklch(0.95 0.12 75)" }}
+              >
+                {daysUntilExam}
+              </span>
+              <span
+                className="text-base"
+                style={{ color: "oklch(0.72 0.08 285)" }}
+              >
+                days until next exam
+              </span>
+              <span
+                className="text-xs mt-1"
+                style={{ color: "oklch(0.55 0.08 285)" }}
+              >
+                {new Date(examDate).toLocaleDateString("en-IN", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </span>
+              <button
+                type="button"
+                data-ocid="exam_countdown.edit_button"
+                onClick={() => setEditingExamDate(true)}
+                className="mt-2 px-3 py-1 rounded-lg text-xs transition-all"
+                style={{
+                  background: "oklch(1 0 0 / 0.1)",
+                  color: "oklch(0.75 0.1 80)",
+                  border: "1px solid oklch(1 0 0 / 0.15)",
+                }}
+              >
+                <Pencil className="w-3 h-3 inline mr-1" />
+                Set exam date
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <input
+                type="date"
+                data-ocid="exam_countdown.input"
+                value={examDate}
+                onChange={(e) => {
+                  setExamDate(e.target.value);
+                  localStorage.setItem("exam_date", e.target.value);
+                }}
+                className="rounded-lg px-3 py-1.5 text-sm"
+                style={{
+                  background: "oklch(1 0 0 / 0.12)",
+                  color: "oklch(0.9 0.06 285)",
+                  border: "1px solid oklch(0.6 0.1 285 / 0.4)",
+                }}
+              />
+              <button
+                type="button"
+                data-ocid="exam_countdown.save_button"
+                onClick={() => setEditingExamDate(false)}
+                className="px-3 py-1.5 rounded-lg text-sm font-semibold"
+                style={{ background: "oklch(0.55 0.18 150)", color: "white" }}
+              >
+                Save
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ──────────────── STATS SUMMARY ──────────────── */}
+        <div className="grid grid-cols-3 gap-3 mb-6">
+          <div
+            data-ocid="stats.study_hours.card"
+            className="rounded-2xl p-4 text-center"
+            style={{
+              background:
+                "linear-gradient(135deg, oklch(0.96 0.03 225), oklch(0.93 0.04 215))",
+              border: "1px solid oklch(0.85 0.04 225 / 0.5)",
+            }}
+          >
+            <div
+              className="text-2xl font-bold font-display"
+              style={{ color: "oklch(0.38 0.16 225)" }}
+            >
+              {totalWeeklyHours.toFixed(1)}h
+            </div>
+            <div
+              className="text-xs mt-0.5"
+              style={{ color: "oklch(0.55 0.1 225)" }}
+            >
+              Study Hours
+            </div>
+            <div className="text-xs" style={{ color: "oklch(0.65 0.08 225)" }}>
+              This Week
+            </div>
+          </div>
+          <div
+            data-ocid="stats.books_completed.card"
+            className="rounded-2xl p-4 text-center"
+            style={{
+              background:
+                "linear-gradient(135deg, oklch(0.96 0.025 155), oklch(0.93 0.03 145))",
+              border: "1px solid oklch(0.85 0.03 155 / 0.5)",
+            }}
+          >
+            <div
+              className="text-2xl font-bold font-display"
+              style={{ color: "oklch(0.38 0.14 155)" }}
+            >
+              {booksCompletedCount}
+            </div>
+            <div
+              className="text-xs mt-0.5"
+              style={{ color: "oklch(0.5 0.1 155)" }}
+            >
+              Books
+            </div>
+            <div className="text-xs" style={{ color: "oklch(0.6 0.08 155)" }}>
+              Completed
+            </div>
+          </div>
+          <div
+            data-ocid="stats.tasks_completed.card"
+            className="rounded-2xl p-4 text-center"
+            style={{
+              background:
+                "linear-gradient(135deg, oklch(0.96 0.03 60), oklch(0.93 0.04 50))",
+              border: "1px solid oklch(0.85 0.04 55 / 0.5)",
+            }}
+          >
+            <div
+              className="text-2xl font-bold font-display"
+              style={{ color: "oklch(0.38 0.16 50)" }}
+            >
+              {tasksCompletedCount}
+            </div>
+            <div
+              className="text-xs mt-0.5"
+              style={{ color: "oklch(0.52 0.12 55)" }}
+            >
+              Tasks
+            </div>
+            <div className="text-xs" style={{ color: "oklch(0.62 0.1 55)" }}>
+              Completed
+            </div>
+          </div>
+        </div>
+
+        {/* ──────────────── TODAY'S REMINDER + FOCUS ──────────────── */}
+        <div className="grid gap-4 md:grid-cols-2 mb-6">
+          {/* Reminder */}
+          <div
+            data-ocid="reminder.card"
+            className="rounded-2xl p-5"
+            style={{
+              background:
+                "linear-gradient(135deg, oklch(0.98 0.02 80), oklch(0.95 0.04 70))",
+              border: "1px solid oklch(0.88 0.05 75 / 0.6)",
+            }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span
+                className="font-display font-semibold text-base"
+                style={{ color: "oklch(0.38 0.12 60)" }}
+              >
+                ✨ Today&apos;s Reminder
+              </span>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  data-ocid="reminder.cycle_button"
+                  onClick={() => {
+                    setReminderIdx(
+                      (prev) => (prev + 1) % REMINDER_QUOTES.length,
+                    );
+                    setCustomReminder("");
+                  }}
+                  className="px-2 py-1 rounded-lg text-xs"
+                  style={{
+                    background: "oklch(0.88 0.04 70 / 0.6)",
+                    color: "oklch(0.48 0.1 60)",
+                  }}
+                >
+                  Next
+                </button>
+                <button
+                  type="button"
+                  data-ocid="reminder.edit_button"
+                  onClick={() => setEditingReminder(!editingReminder)}
+                  className="px-2 py-1 rounded-lg text-xs"
+                  style={{
+                    background: "oklch(0.88 0.04 70 / 0.6)",
+                    color: "oklch(0.48 0.1 60)",
+                  }}
+                >
+                  <Pencil className="w-3 h-3 inline" />
+                </button>
+              </div>
+            </div>
+            {editingReminder ? (
+              <div className="space-y-2">
+                <textarea
+                  data-ocid="reminder.textarea"
+                  value={customReminder || currentReminder}
+                  onChange={(e) => setCustomReminder(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-xl p-2 text-sm resize-none"
+                  style={{
+                    background: "oklch(0.92 0.025 75 / 0.5)",
+                    color: "oklch(0.32 0.08 60)",
+                    border: "1px solid oklch(0.8 0.05 70 / 0.5)",
+                  }}
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    data-ocid="reminder.save_button"
+                    onClick={() => {
+                      localStorage.setItem("custom_reminder", customReminder);
+                      setEditingReminder(false);
+                    }}
+                    className="px-3 py-1 rounded-lg text-xs font-semibold"
+                    style={{
+                      background: "oklch(0.5 0.16 150)",
+                      color: "white",
+                    }}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    data-ocid="reminder.cancel_button"
+                    onClick={() => setEditingReminder(false)}
+                    className="px-3 py-1 rounded-lg text-xs"
+                    style={{
+                      background: "oklch(0.88 0.03 60)",
+                      color: "oklch(0.45 0.08 60)",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p
+                className="text-sm italic leading-relaxed"
+                style={{ color: "oklch(0.42 0.1 60)" }}
+              >
+                &ldquo;{currentReminder}&rdquo;
+              </p>
+            )}
+          </div>
+
+          {/* Today's Focus */}
+          <div
+            data-ocid="focus.card"
+            className="rounded-2xl p-5"
+            style={{
+              background:
+                "linear-gradient(135deg, oklch(0.97 0.025 285), oklch(0.94 0.03 275))",
+              border: "1px solid oklch(0.85 0.04 285 / 0.5)",
+            }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span
+                className="font-display font-semibold text-base"
+                style={{ color: "oklch(0.35 0.12 285)" }}
+              >
+                🎯 Today&apos;s Focus
+              </span>
+            </div>
+            <div className="space-y-1.5 mb-3">
+              {focusItems.map((item, i) => (
+                <div
+                  key={`focus-${item.label}-${i}`}
+                  data-ocid={`focus.item.${i + 1}`}
+                  className="flex items-center gap-2"
+                >
+                  <Checkbox
+                    data-ocid={`focus.checkbox.${i + 1}`}
+                    checked={item.done}
+                    onCheckedChange={() => {
+                      const next = focusItems.map((f, idx) =>
+                        idx === i ? { ...f, done: !f.done } : f,
+                      );
+                      saveFocusItems(next);
+                    }}
+                    id={`focus-${i}`}
+                  />
+                  <label
+                    htmlFor={`focus-${i}`}
+                    className="text-sm flex-1 cursor-pointer"
+                    style={{
+                      color: item.done
+                        ? "oklch(0.6 0.06 285)"
+                        : "oklch(0.32 0.08 285)",
+                      textDecoration: item.done ? "line-through" : "none",
+                    }}
+                  >
+                    <span className="font-semibold">{item.label}:</span>{" "}
+                    {item.detail}
+                  </label>
+                  <button
+                    type="button"
+                    data-ocid={`focus.delete_button.${i + 1}`}
+                    onClick={() =>
+                      saveFocusItems(focusItems.filter((_, idx) => idx !== i))
+                    }
+                    className="p-1 rounded opacity-0 group-hover:opacity-100 hover:opacity-100"
+                    style={{ color: "oklch(0.55 0.18 25)" }}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-1.5">
+              <Input
+                data-ocid="focus.label.input"
+                placeholder="Label"
+                value={focusInput}
+                onChange={(e) => setFocusInput(e.target.value)}
+                className="flex-1 rounded-lg border-0 text-xs h-8"
+                style={{
+                  background: "oklch(0.9 0.025 285 / 0.5)",
+                  color: "oklch(0.28 0.06 285)",
+                }}
+              />
+              <Input
+                data-ocid="focus.detail.input"
+                placeholder="Detail"
+                value={focusDetailInput}
+                onChange={(e) => setFocusDetailInput(e.target.value)}
+                className="flex-1 rounded-lg border-0 text-xs h-8"
+                style={{
+                  background: "oklch(0.9 0.025 285 / 0.5)",
+                  color: "oklch(0.28 0.06 285)",
+                }}
+              />
+              <Button
+                data-ocid="focus.add_button"
+                onClick={() => {
+                  if (!focusInput.trim()) return;
+                  saveFocusItems([
+                    ...focusItems,
+                    {
+                      label: focusInput.trim(),
+                      detail: focusDetailInput.trim(),
+                      done: false,
+                    },
+                  ]);
+                  setFocusInput("");
+                  setFocusDetailInput("");
+                }}
+                className="h-8 px-2 rounded-lg"
+                style={{ background: "oklch(0.48 0.16 285)", color: "white" }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* ──────────────── STUDY HOURS + WINS ──────────────── */}
+        <div className="grid gap-4 md:grid-cols-2 mb-6">
+          {/* Study Hours This Week */}
+          <div
+            data-ocid="study_hours.card"
+            className="rounded-2xl p-5"
+            style={{
+              background:
+                "linear-gradient(135deg, oklch(0.96 0.03 225), oklch(0.93 0.04 215))",
+              border: "1px solid oklch(0.85 0.04 225 / 0.5)",
+            }}
+          >
+            <div
+              className="font-display font-semibold text-base mb-3"
+              style={{ color: "oklch(0.35 0.14 225)" }}
+            >
+              📊 Study Hours This Week
+            </div>
+            <div className="space-y-1.5 mb-3">
+              {DAYS_OF_WEEK.map((day) => {
+                const hours = weeklyHours[day] || 0;
+                const maxH = Math.max(...Object.values(weeklyHours), 1);
+                return (
+                  <div key={day} className="flex items-center gap-2">
+                    <span
+                      className="text-xs w-7 shrink-0 font-medium"
+                      style={{ color: "oklch(0.48 0.12 225)" }}
+                    >
+                      {day}
+                    </span>
+                    <div
+                      className="flex-1 h-3 rounded-full overflow-hidden"
+                      style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
+                    >
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${(hours / maxH) * 100}%`,
+                          background:
+                            day === todayDayKey
+                              ? "linear-gradient(90deg, oklch(0.5 0.18 225), oklch(0.6 0.16 200))"
+                              : "oklch(0.65 0.12 225 / 0.7)",
+                        }}
+                      />
+                    </div>
+                    <span
+                      className="text-xs w-8 text-right shrink-0"
+                      style={{ color: "oklch(0.5 0.1 225)" }}
+                    >
+                      {hours >= 1
+                        ? `${hours.toFixed(1)}h`
+                        : `${Math.round(hours * 60)}m`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                data-ocid="study_hours.add_input"
+                type="number"
+                placeholder="Add minutes"
+                value={addMinutesInput}
+                onChange={(e) => setAddMinutesInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addStudyMinutes()}
+                className="flex-1 rounded-xl border-0 text-sm h-8"
+                style={{
+                  background: "oklch(0.9 0.025 225 / 0.5)",
+                  color: "oklch(0.28 0.08 225)",
+                }}
+              />
+              <Button
+                data-ocid="study_hours.add_button"
+                onClick={addStudyMinutes}
+                className="h-8 px-3 rounded-xl text-xs"
+                style={{ background: "oklch(0.5 0.18 225)", color: "white" }}
+              >
+                + Add
+              </Button>
+            </div>
+          </div>
+
+          {/* Today's 3 Wins */}
+          <div
+            data-ocid="wins.card"
+            className="rounded-2xl p-5"
+            style={{
+              background:
+                "linear-gradient(135deg, oklch(0.97 0.03 55), oklch(0.94 0.04 45))",
+              border: "1px solid oklch(0.86 0.05 55 / 0.5)",
+            }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <Trophy
+                className="w-5 h-5"
+                style={{ color: "oklch(0.58 0.2 55)" }}
+              />
+              <span
+                className="font-display font-semibold text-base"
+                style={{ color: "oklch(0.38 0.14 55)" }}
+              >
+                Today&apos;s 3 Wins
+              </span>
+            </div>
+            <div className="space-y-2.5">
+              {wins.map((win, i) => (
+                <div
+                  key={`win-${win.label}-${i}`}
+                  data-ocid={`wins.item.${i + 1}`}
+                  className="flex items-center gap-3"
+                >
+                  <Checkbox
+                    data-ocid={`wins.checkbox.${i + 1}`}
+                    checked={win.done}
+                    onCheckedChange={() =>
+                      saveWins(
+                        wins.map((w, idx) =>
+                          idx === i ? { ...w, done: !w.done } : w,
+                        ),
+                      )
+                    }
+                    id={`win-${i}`}
+                  />
+                  {editingWinIdx === i ? (
+                    <div className="flex gap-1.5 flex-1">
+                      <Input
+                        value={editingWinLabel}
+                        onChange={(e) => setEditingWinLabel(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            saveWins(
+                              wins.map((w, idx) =>
+                                idx === i
+                                  ? {
+                                      ...w,
+                                      label: editingWinLabel.trim() || w.label,
+                                    }
+                                  : w,
+                              ),
+                            );
+                            setEditingWinIdx(null);
+                          }
+                          if (e.key === "Escape") setEditingWinIdx(null);
+                        }}
+                        autoFocus
+                        className="flex-1 rounded-lg border-0 h-7 text-sm"
+                        style={{
+                          background: "oklch(0.9 0.03 55 / 0.5)",
+                          color: "oklch(0.3 0.1 55)",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          saveWins(
+                            wins.map((w, idx) =>
+                              idx === i
+                                ? {
+                                    ...w,
+                                    label: editingWinLabel.trim() || w.label,
+                                  }
+                                : w,
+                            ),
+                          );
+                          setEditingWinIdx(null);
+                        }}
+                        className="px-2 rounded-lg text-xs"
+                        style={{
+                          background: "oklch(0.5 0.16 150)",
+                          color: "white",
+                        }}
+                      >
+                        ✓
+                      </button>
+                    </div>
+                  ) : (
+                    <label
+                      htmlFor={`win-${i}`}
+                      className="flex-1 text-sm cursor-pointer"
+                      style={{
+                        color: win.done
+                          ? "oklch(0.62 0.1 55)"
+                          : "oklch(0.35 0.1 55)",
+                        textDecoration: win.done ? "line-through" : "none",
+                      }}
+                    >
+                      {win.label}
+                    </label>
+                  )}
+                  <button
+                    type="button"
+                    data-ocid={`wins.edit_button.${i + 1}`}
+                    onClick={() => {
+                      setEditingWinIdx(i);
+                      setEditingWinLabel(win.label);
+                    }}
+                    className="p-1 rounded opacity-60 hover:opacity-100"
+                    style={{ color: "oklch(0.55 0.12 55)" }}
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ──────────────── RIYALAH STREAK CARD ──────────────── */}
+        <div
+          data-ocid="riyalah_streak.card"
+          className="rounded-2xl p-5 mb-6"
+          style={{
+            background:
+              "linear-gradient(135deg, oklch(0.22 0.1 285 / 0.95), oklch(0.18 0.08 295 / 0.95))",
+            border: "1px solid oklch(0.4 0.1 285 / 0.3)",
+          }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div
+                className="font-display text-lg font-bold mb-1"
+                style={{ color: "oklch(0.88 0.1 80)" }}
+              >
+                🔥 Riyalah Streak
+              </div>
+              <div className="flex gap-6">
+                <div>
+                  <div
+                    className="font-display text-3xl font-bold"
+                    style={{ color: "oklch(0.88 0.18 70)" }}
+                  >
+                    {riyalahStreak}
+                  </div>
+                  <div
+                    className="text-xs"
+                    style={{ color: "oklch(0.6 0.08 285)" }}
+                  >
+                    Current streak
+                  </div>
+                </div>
+                <div>
+                  <div
+                    className="font-display text-3xl font-bold"
+                    style={{ color: "oklch(0.78 0.14 80)" }}
+                  >
+                    {riyalahLongest}
+                  </div>
+                  <div
+                    className="text-xs"
+                    style={{ color: "oklch(0.6 0.08 285)" }}
+                  >
+                    Longest streak
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                data-ocid="riyalah_streak.increment_button"
+                onClick={handleMarkStreakToday}
+                className="rounded-xl text-sm"
+                style={{
+                  background: "oklch(0.55 0.22 55 / 0.3)",
+                  color: "oklch(0.88 0.18 70)",
+                  border: "1px solid oklch(0.65 0.2 60 / 0.4)",
+                }}
+              >
+                🔥 Mark Today
+              </Button>
+              <Button
+                data-ocid="riyalah_streak.reset_button"
+                onClick={() => {
+                  setRiyalahStreak(0);
+                  localStorage.setItem("riyalah_streak", "0");
+                  toast.info("Streak reset.");
+                }}
+                variant="outline"
+                className="rounded-xl text-sm"
+                style={{
+                  border: "1px solid oklch(0.4 0.1 285 / 0.4)",
+                  color: "oklch(0.6 0.1 285)",
+                }}
+              >
+                Reset
+              </Button>
+            </div>
+          </div>
+        </div>
+
         <Tabs defaultValue="spiritual" className="space-y-6">
           <TabsList
             className="grid grid-cols-4 gap-1 p-1 h-auto rounded-2xl"
@@ -611,7 +1628,7 @@ function AppContent() {
                     "0 8px 32px oklch(0.12 0.1 285 / 0.5), 0 0 0 1px oklch(0.35 0.1 285 / 0.3), inset 0 1px 0 oklch(0.5 0.12 80 / 0.1)",
                 }}
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
                     <h2
                       className="font-display text-xl font-bold"
@@ -626,21 +1643,56 @@ function AppContent() {
                       Spiritual practices for today
                     </p>
                   </div>
-                  <Badge
-                    className="text-sm px-3 py-1 rounded-full font-semibold"
-                    style={{
-                      background: "oklch(0.42 0.22 285 / 0.3)",
-                      color: "oklch(0.85 0.14 80)",
-                      border: "1px solid oklch(0.5 0.15 80 / 0.3)",
-                    }}
-                  >
-                    {checkedItems.riyalah.length} / {RIYALAH.length}
-                  </Badge>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge
+                      className="text-sm px-3 py-1.5 rounded-full font-bold"
+                      style={{
+                        background:
+                          riyalahStreak > 0
+                            ? "oklch(0.55 0.22 55 / 0.3)"
+                            : "oklch(0.42 0.22 285 / 0.3)",
+                        color:
+                          riyalahStreak > 0
+                            ? "oklch(0.88 0.18 70)"
+                            : "oklch(0.75 0.12 285)",
+                        border: `1px solid ${riyalahStreak > 0 ? "oklch(0.65 0.2 60 / 0.4)" : "oklch(0.5 0.15 80 / 0.3)"}`,
+                      }}
+                    >
+                      {riyalahStreak > 0
+                        ? `🔥 ${riyalahStreak} day streak`
+                        : "✨ Start your streak!"}
+                    </Badge>
+                    <Badge
+                      className="text-sm px-3 py-1 rounded-full font-semibold"
+                      style={{
+                        background: "oklch(0.42 0.22 285 / 0.3)",
+                        color: "oklch(0.85 0.14 80)",
+                        border: "1px solid oklch(0.5 0.15 80 / 0.3)",
+                      }}
+                    >
+                      {checkedItems.riyalah.length} / {riyalah.length}
+                    </Badge>
+                  </div>
                 </div>
+                <Button
+                  data-ocid="riyalah.streak_button"
+                  onClick={handleMarkStreakToday}
+                  className="w-full rounded-xl font-semibold text-sm"
+                  style={{
+                    background: "oklch(0.42 0.22 285 / 0.4)",
+                    color: "oklch(0.9 0.12 80)",
+                    border: "1px solid oklch(0.55 0.15 80 / 0.35)",
+                  }}
+                >
+                  🔥 Mark Today Complete
+                </Button>
 
                 <div className="space-y-2.5">
                   {spiritualChecklistItems.map(({ label, emoji }, i) => {
                     const checked = checkedItems.riyalah.includes(label);
+                    const isEditing =
+                      editingItem?.section === "riyalah" &&
+                      editingItem.index === i;
                     return (
                       <motion.div
                         key={label}
@@ -651,9 +1703,10 @@ function AppContent() {
                           duration: 0.4,
                           ease: "easeOut",
                         }}
+                        className="group"
                       >
                         <label
-                          htmlFor={`riyalah-${i}`}
+                          htmlFor={isEditing ? undefined : `riyalah-${i}`}
                           className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all"
                           style={{
                             background: checked
@@ -677,21 +1730,80 @@ function AppContent() {
                             }}
                           />
                           <span className="text-lg">{emoji}</span>
-                          <span
-                            className="font-medium"
-                            style={{
-                              color: checked
-                                ? "oklch(0.85 0.14 80)"
-                                : "oklch(0.78 0.06 285)",
-                              textDecoration: checked ? "line-through" : "none",
-                              opacity: checked ? 0.75 : 1,
-                            }}
-                          >
-                            {label}
-                          </span>
-                          {checked && (
+                          {isEditing ? (
+                            <Input
+                              data-ocid={`spiritual.item.input.${i + 1}`}
+                              autoFocus
+                              value={editingItem.value}
+                              onChange={(e) =>
+                                setEditingItem({
+                                  ...editingItem,
+                                  value: e.target.value,
+                                })
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter")
+                                  renameItem(
+                                    "riyalah",
+                                    i,
+                                    editingItem.value,
+                                    setRiyalah,
+                                    "riyalah",
+                                    label,
+                                  );
+                                if (e.key === "Escape") setEditingItem(null);
+                              }}
+                              onBlur={() =>
+                                renameItem(
+                                  "riyalah",
+                                  i,
+                                  editingItem.value,
+                                  setRiyalah,
+                                  "riyalah",
+                                  label,
+                                )
+                              }
+                              className="h-7 text-sm flex-1 bg-transparent border-b border-t-0 border-l-0 border-r-0 rounded-none focus-visible:ring-0 px-1"
+                              style={{ color: "oklch(0.85 0.14 80)" }}
+                              onClick={(e) => e.preventDefault()}
+                            />
+                          ) : (
                             <span
-                              className="ml-auto text-sm"
+                              className="font-medium flex-1"
+                              style={{
+                                color: checked
+                                  ? "oklch(0.85 0.14 80)"
+                                  : "oklch(0.78 0.06 285)",
+                                textDecoration: checked
+                                  ? "line-through"
+                                  : "none",
+                                opacity: checked ? 0.75 : 1,
+                              }}
+                            >
+                              {label}
+                            </span>
+                          )}
+                          {!isEditing && (
+                            <button
+                              type="button"
+                              data-ocid={`spiritual.item.edit_button.${i + 1}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setEditingItem({
+                                  section: "riyalah",
+                                  index: i,
+                                  value: label,
+                                });
+                              }}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto p-1 rounded"
+                              style={{ color: "oklch(0.58 0.08 285)" }}
+                            >
+                              <Pencil size={14} />
+                            </button>
+                          )}
+                          {!isEditing && checked && (
+                            <span
+                              className="text-sm"
                               style={{ color: "oklch(0.75 0.16 80)" }}
                             >
                               ✓
@@ -720,7 +1832,7 @@ function AppContent() {
                   size={160}
                   strokeWidth={14}
                   label="Today's Progress"
-                  sublabel={`${checkedItems.riyalah.length} of ${RIYALAH.length} done`}
+                  sublabel={`${checkedItems.riyalah.length} of ${riyalah.length} done`}
                 />
 
                 <div className="w-full space-y-2">
@@ -796,30 +1908,51 @@ function AppContent() {
                         border: "1px solid oklch(0.55 0.12 155 / 0.25)",
                       }}
                     >
-                      {checkedItems.mABooks.length}/{MA_BOOKS.length}
+                      {checkedItems.mABooks.length}/{maBooks.length}
                     </Badge>
                   </div>
-                  <div className="mt-2 academics-progress">
+                  <div className="mt-3 academics-progress space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span
+                        className="text-xs"
+                        style={{ color: "oklch(0.52 0.1 155)" }}
+                      >
+                        {checkedItems.mABooks.length} of {maBooks.length} books
+                        read
+                      </span>
+                      <span
+                        className="text-sm font-bold"
+                        style={{ color: "oklch(0.38 0.14 155)" }}
+                      >
+                        {pct(checkedItems.mABooks.length, maBooks.length)}%
+                      </span>
+                    </div>
                     <Progress
-                      value={pct(checkedItems.mABooks.length, MA_BOOKS.length)}
-                      className="h-2.5 rounded-full"
+                      value={pct(checkedItems.mABooks.length, maBooks.length)}
+                      className="h-3 rounded-full"
                       style={{ background: "oklch(0.88 0.025 155 / 0.4)" }}
                     />
                     <p
-                      className="text-xs mt-1.5"
-                      style={{ color: "oklch(0.58 0.08 155)" }}
+                      className="text-xs"
+                      style={{ color: "oklch(0.6 0.08 155)" }}
                     >
-                      {pct(checkedItems.mABooks.length, MA_BOOKS.length)}%
-                      complete
+                      {pct(checkedItems.mABooks.length, maBooks.length) === 100
+                        ? "🎉 All books complete!"
+                        : pct(checkedItems.mABooks.length, maBooks.length) >= 50
+                          ? "📖 Over halfway there!"
+                          : "📚 Keep reading!"}
                     </p>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-1.5">
-                  {MA_BOOKS.map((book, i) => {
+                  {maBooks.map((book, i) => {
                     const checked = checkedItems.mABooks.includes(book);
+                    const isEditing =
+                      editingItem?.section === "maBooks" &&
+                      editingItem.index === i;
                     return (
-                      <motion.label
-                        key={book}
+                      <motion.div
+                        key={`mabook-${book}`}
                         initial={{ opacity: 0, y: 16 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{
@@ -827,8 +1960,7 @@ function AppContent() {
                           duration: 0.4,
                           ease: "easeOut",
                         }}
-                        htmlFor={`mabook-${i}`}
-                        className="flex items-start gap-3 p-2.5 rounded-lg cursor-pointer transition-colors"
+                        className="group flex items-start gap-3 p-2.5 rounded-lg transition-colors"
                         style={{
                           background: checked
                             ? "oklch(0.42 0.14 155 / 0.08)"
@@ -843,19 +1975,75 @@ function AppContent() {
                           className="mt-0.5"
                           style={{ accentColor: "oklch(0.42 0.14 155)" }}
                         />
-                        <span
-                          className="text-sm leading-snug"
-                          style={{
-                            color: checked
-                              ? "oklch(0.52 0.1 155)"
-                              : "oklch(0.28 0.02 75)",
-                            textDecoration: checked ? "line-through" : "none",
-                            opacity: checked ? 0.65 : 1,
-                          }}
-                        >
-                          {book}
-                        </span>
-                      </motion.label>
+                        {isEditing ? (
+                          <Input
+                            data-ocid={`mabooks.item.input.${i + 1}`}
+                            autoFocus
+                            value={editingItem.value}
+                            onChange={(e) =>
+                              setEditingItem({
+                                ...editingItem,
+                                value: e.target.value,
+                              })
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter")
+                                renameItem(
+                                  "maBooks",
+                                  i,
+                                  editingItem.value,
+                                  setMaBooks,
+                                  "mABooks",
+                                  book,
+                                );
+                              if (e.key === "Escape") setEditingItem(null);
+                            }}
+                            onBlur={() =>
+                              renameItem(
+                                "maBooks",
+                                i,
+                                editingItem.value,
+                                setMaBooks,
+                                "mABooks",
+                                book,
+                              )
+                            }
+                            className="h-7 text-sm flex-1 bg-transparent border-b border-t-0 border-l-0 border-r-0 rounded-none focus-visible:ring-0 px-1"
+                            style={{ color: "oklch(0.28 0.02 75)" }}
+                          />
+                        ) : (
+                          <label
+                            htmlFor={`mabook-${i}`}
+                            className="text-sm leading-snug flex-1 cursor-pointer"
+                            style={{
+                              color: checked
+                                ? "oklch(0.52 0.1 155)"
+                                : "oklch(0.28 0.02 75)",
+                              textDecoration: checked ? "line-through" : "none",
+                              opacity: checked ? 0.65 : 1,
+                            }}
+                          >
+                            {book}
+                          </label>
+                        )}
+                        {!isEditing && (
+                          <button
+                            type="button"
+                            data-ocid={`mabooks.item.edit_button.${i + 1}`}
+                            onClick={() =>
+                              setEditingItem({
+                                section: "maBooks",
+                                index: i,
+                                value: book,
+                              })
+                            }
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded flex-shrink-0"
+                            style={{ color: "oklch(0.55 0.08 155)" }}
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        )}
+                      </motion.div>
                     );
                   })}
                 </CardContent>
@@ -880,14 +2068,14 @@ function AppContent() {
                           border: "1px solid oklch(0.55 0.12 155 / 0.25)",
                         }}
                       >
-                        {checkedItems.certificates.length}/{CERTIFICATES.length}
+                        {checkedItems.certificates.length}/{certificates.length}
                       </Badge>
                     </div>
                     <div className="mt-2 academics-progress">
                       <Progress
                         value={pct(
                           checkedItems.certificates.length,
-                          CERTIFICATES.length,
+                          certificates.length,
                         )}
                         className="h-2.5 rounded-full"
                         style={{ background: "oklch(0.88 0.025 155 / 0.4)" }}
@@ -895,13 +2083,15 @@ function AppContent() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-1.5">
-                    {CERTIFICATES.map((cert, i) => {
+                    {certificates.map((cert, i) => {
                       const checked = checkedItems.certificates.includes(cert);
+                      const isEditing =
+                        editingItem?.section === "certificates" &&
+                        editingItem.index === i;
                       return (
-                        <label
-                          key={cert}
-                          htmlFor={`cert-${i}`}
-                          className="flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors"
+                        <div
+                          key={`cert-${cert}`}
+                          className="group flex items-center gap-3 p-2.5 rounded-lg transition-colors"
                           style={{
                             background: checked
                               ? "oklch(0.42 0.14 155 / 0.08)"
@@ -916,19 +2106,77 @@ function AppContent() {
                               toggleCheck("certificates", cert)
                             }
                           />
-                          <span
-                            className="text-sm font-medium"
-                            style={{
-                              color: checked
-                                ? "oklch(0.52 0.1 155)"
-                                : "oklch(0.28 0.02 75)",
-                              textDecoration: checked ? "line-through" : "none",
-                              opacity: checked ? 0.65 : 1,
-                            }}
-                          >
-                            {cert}
-                          </span>
-                        </label>
+                          {isEditing ? (
+                            <Input
+                              data-ocid={`certificates.item.input.${i + 1}`}
+                              autoFocus
+                              value={editingItem.value}
+                              onChange={(e) =>
+                                setEditingItem({
+                                  ...editingItem,
+                                  value: e.target.value,
+                                })
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter")
+                                  renameItem(
+                                    "certificates",
+                                    i,
+                                    editingItem.value,
+                                    setCertificates,
+                                    "certificates",
+                                    cert,
+                                  );
+                                if (e.key === "Escape") setEditingItem(null);
+                              }}
+                              onBlur={() =>
+                                renameItem(
+                                  "certificates",
+                                  i,
+                                  editingItem.value,
+                                  setCertificates,
+                                  "certificates",
+                                  cert,
+                                )
+                              }
+                              className="h-7 text-sm flex-1 bg-transparent border-b border-t-0 border-l-0 border-r-0 rounded-none focus-visible:ring-0 px-1"
+                              style={{ color: "oklch(0.28 0.02 75)" }}
+                            />
+                          ) : (
+                            <label
+                              htmlFor={`cert-${i}`}
+                              className="text-sm font-medium flex-1 cursor-pointer"
+                              style={{
+                                color: checked
+                                  ? "oklch(0.52 0.1 155)"
+                                  : "oklch(0.28 0.02 75)",
+                                textDecoration: checked
+                                  ? "line-through"
+                                  : "none",
+                                opacity: checked ? 0.65 : 1,
+                              }}
+                            >
+                              {cert}
+                            </label>
+                          )}
+                          {!isEditing && (
+                            <button
+                              type="button"
+                              data-ocid={`certificates.item.edit_button.${i + 1}`}
+                              onClick={() =>
+                                setEditingItem({
+                                  section: "certificates",
+                                  index: i,
+                                  value: cert,
+                                })
+                              }
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded flex-shrink-0"
+                              style={{ color: "oklch(0.55 0.08 155)" }}
+                            >
+                              <Pencil size={14} />
+                            </button>
+                          )}
+                        </div>
                       );
                     })}
                   </CardContent>
@@ -952,28 +2200,27 @@ function AppContent() {
                           border: "1px solid oklch(0.55 0.12 155 / 0.25)",
                         }}
                       >
-                        {checkedItems.nETPrep.length}/{NET_PREP.length}
+                        {checkedItems.nETPrep.length}/{netPrep.length}
                       </Badge>
                     </div>
                     <div className="mt-2 academics-progress">
                       <Progress
-                        value={pct(
-                          checkedItems.nETPrep.length,
-                          NET_PREP.length,
-                        )}
+                        value={pct(checkedItems.nETPrep.length, netPrep.length)}
                         className="h-2.5 rounded-full"
                         style={{ background: "oklch(0.88 0.025 155 / 0.4)" }}
                       />
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-1.5">
-                    {NET_PREP.map((item, i) => {
+                    {netPrep.map((item, i) => {
                       const checked = checkedItems.nETPrep.includes(item);
+                      const isEditing =
+                        editingItem?.section === "netPrep" &&
+                        editingItem.index === i;
                       return (
-                        <label
-                          key={item}
-                          htmlFor={`net-${i}`}
-                          className="flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors"
+                        <div
+                          key={`net-${item}`}
+                          className="group flex items-center gap-3 p-2.5 rounded-lg transition-colors"
                           style={{
                             background: checked
                               ? "oklch(0.42 0.14 155 / 0.08)"
@@ -986,19 +2233,77 @@ function AppContent() {
                             checked={checked}
                             onCheckedChange={() => toggleCheck("nETPrep", item)}
                           />
-                          <span
-                            className="text-sm font-medium"
-                            style={{
-                              color: checked
-                                ? "oklch(0.52 0.1 155)"
-                                : "oklch(0.28 0.02 75)",
-                              textDecoration: checked ? "line-through" : "none",
-                              opacity: checked ? 0.65 : 1,
-                            }}
-                          >
-                            {item}
-                          </span>
-                        </label>
+                          {isEditing ? (
+                            <Input
+                              data-ocid={`netprep.item.input.${i + 1}`}
+                              autoFocus
+                              value={editingItem.value}
+                              onChange={(e) =>
+                                setEditingItem({
+                                  ...editingItem,
+                                  value: e.target.value,
+                                })
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter")
+                                  renameItem(
+                                    "netPrep",
+                                    i,
+                                    editingItem.value,
+                                    setNetPrep,
+                                    "nETPrep",
+                                    item,
+                                  );
+                                if (e.key === "Escape") setEditingItem(null);
+                              }}
+                              onBlur={() =>
+                                renameItem(
+                                  "netPrep",
+                                  i,
+                                  editingItem.value,
+                                  setNetPrep,
+                                  "nETPrep",
+                                  item,
+                                )
+                              }
+                              className="h-7 text-sm flex-1 bg-transparent border-b border-t-0 border-l-0 border-r-0 rounded-none focus-visible:ring-0 px-1"
+                              style={{ color: "oklch(0.28 0.02 75)" }}
+                            />
+                          ) : (
+                            <label
+                              htmlFor={`net-${i}`}
+                              className="text-sm font-medium flex-1 cursor-pointer"
+                              style={{
+                                color: checked
+                                  ? "oklch(0.52 0.1 155)"
+                                  : "oklch(0.28 0.02 75)",
+                                textDecoration: checked
+                                  ? "line-through"
+                                  : "none",
+                                opacity: checked ? 0.65 : 1,
+                              }}
+                            >
+                              {item}
+                            </label>
+                          )}
+                          {!isEditing && (
+                            <button
+                              type="button"
+                              data-ocid={`netprep.item.edit_button.${i + 1}`}
+                              onClick={() =>
+                                setEditingItem({
+                                  section: "netPrep",
+                                  index: i,
+                                  value: item,
+                                })
+                              }
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded flex-shrink-0"
+                              style={{ color: "oklch(0.55 0.08 155)" }}
+                            >
+                              <Pencil size={14} />
+                            </button>
+                          )}
+                        </div>
                       );
                     })}
                   </CardContent>
@@ -1033,12 +2338,12 @@ function AppContent() {
                         border: "1px solid oklch(0.65 0.15 55 / 0.3)",
                       }}
                     >
-                      {checkedItems.students.length}/{STUDENTS.length}
+                      {checkedItems.students.length}/{students.length}
                     </Badge>
                   </div>
                   <div className="mt-2 career-progress">
                     <Progress
-                      value={pct(checkedItems.students.length, STUDENTS.length)}
+                      value={pct(checkedItems.students.length, students.length)}
                       className="h-2.5 rounded-full"
                       style={{ background: "oklch(0.88 0.03 55 / 0.4)" }}
                     />
@@ -1051,8 +2356,11 @@ function AppContent() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {STUDENTS.map((student, i) => {
+                  {students.map((student, i) => {
                     const checked = checkedItems.students.includes(student);
+                    const isEditing =
+                      editingItem?.section === "students" &&
+                      editingItem.index === i;
                     const initials = student
                       .split(" ")
                       .map((n) => n[0])
@@ -1060,8 +2368,8 @@ function AppContent() {
                       .slice(0, 2)
                       .toUpperCase();
                     return (
-                      <motion.label
-                        key={student}
+                      <motion.div
+                        key={`student-${student}`}
                         initial={{ opacity: 0, y: 16 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{
@@ -1069,8 +2377,7 @@ function AppContent() {
                           duration: 0.4,
                           ease: "easeOut",
                         }}
-                        htmlFor={`student-${i}`}
-                        className="flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all"
+                        className="group p-3 rounded-xl transition-all space-y-2"
                         style={{
                           background: checked
                             ? "oklch(0.55 0.18 50 / 0.1)"
@@ -1078,46 +2385,153 @@ function AppContent() {
                           border: `1px solid ${checked ? "oklch(0.65 0.15 55 / 0.35)" : "oklch(0.88 0.025 60 / 0.6)"}`,
                         }}
                       >
-                        <Checkbox
-                          id={`student-${i}`}
-                          data-ocid={`career.students.checkbox.${i + 1}`}
-                          checked={checked}
-                          onCheckedChange={() =>
-                            toggleCheck("students", student)
-                          }
-                        />
-                        <div
-                          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                          style={{
-                            background: checked
-                              ? "oklch(0.65 0.18 50 / 0.25)"
-                              : "oklch(0.82 0.06 55 / 0.5)",
-                            color: "oklch(0.42 0.14 50)",
-                          }}
-                        >
-                          {initials}
-                        </div>
-                        <span
-                          className="font-medium text-sm"
-                          style={{
-                            color: checked
-                              ? "oklch(0.55 0.14 50)"
-                              : "oklch(0.28 0.02 75)",
-                            textDecoration: checked ? "line-through" : "none",
-                            opacity: checked ? 0.7 : 1,
-                          }}
-                        >
-                          {student}
-                        </span>
-                        {checked && (
-                          <span
-                            className="ml-auto text-xs font-medium"
-                            style={{ color: "oklch(0.62 0.16 50)" }}
+                        <div className="flex items-center gap-3">
+                          <Checkbox
+                            id={`student-${i}`}
+                            data-ocid={`career.students.checkbox.${i + 1}`}
+                            checked={checked}
+                            onCheckedChange={() =>
+                              toggleCheck("students", student)
+                            }
+                          />
+                          <div
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                            style={{
+                              background: checked
+                                ? "oklch(0.65 0.18 50 / 0.25)"
+                                : "oklch(0.82 0.06 55 / 0.5)",
+                              color: "oklch(0.42 0.14 50)",
+                            }}
                           >
-                            Active ✓
-                          </span>
-                        )}
-                      </motion.label>
+                            {initials}
+                          </div>
+                          {isEditing ? (
+                            <Input
+                              data-ocid={`students.item.input.${i + 1}`}
+                              autoFocus
+                              value={editingItem.value}
+                              onChange={(e) =>
+                                setEditingItem({
+                                  ...editingItem,
+                                  value: e.target.value,
+                                })
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter")
+                                  renameItem(
+                                    "students",
+                                    i,
+                                    editingItem.value,
+                                    setStudents,
+                                    "students",
+                                    student,
+                                  );
+                                if (e.key === "Escape") setEditingItem(null);
+                              }}
+                              onBlur={() =>
+                                renameItem(
+                                  "students",
+                                  i,
+                                  editingItem.value,
+                                  setStudents,
+                                  "students",
+                                  student,
+                                )
+                              }
+                              className="h-7 text-sm flex-1 bg-transparent border-b border-t-0 border-l-0 border-r-0 rounded-none focus-visible:ring-0 px-1"
+                              style={{ color: "oklch(0.28 0.02 75)" }}
+                            />
+                          ) : (
+                            <label
+                              htmlFor={`student-${i}`}
+                              className="font-medium text-sm flex-1 cursor-pointer"
+                              style={{
+                                color: checked
+                                  ? "oklch(0.55 0.14 50)"
+                                  : "oklch(0.28 0.02 75)",
+                                textDecoration: checked
+                                  ? "line-through"
+                                  : "none",
+                                opacity: checked ? 0.7 : 1,
+                              }}
+                            >
+                              {student}
+                            </label>
+                          )}
+                          {!isEditing && checked && (
+                            <span
+                              className="text-xs font-medium"
+                              style={{ color: "oklch(0.62 0.16 50)" }}
+                            >
+                              Active ✓
+                            </span>
+                          )}
+                          {!isEditing && (
+                            <button
+                              type="button"
+                              data-ocid={`students.item.edit_button.${i + 1}`}
+                              onClick={() =>
+                                setEditingItem({
+                                  section: "students",
+                                  index: i,
+                                  value: student,
+                                })
+                              }
+                              className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto p-1 rounded flex-shrink-0"
+                              style={{ color: "oklch(0.55 0.1 50)" }}
+                            >
+                              <Pencil size={14} />
+                            </button>
+                          )}
+                        </div>
+                        {/* Session counter and notes */}
+                        <div className="flex items-center gap-2 pl-11">
+                          <div
+                            className="flex items-center gap-1.5 px-2 py-1 rounded-lg"
+                            style={{ background: "oklch(0.88 0.04 55 / 0.5)" }}
+                          >
+                            <span
+                              className="text-xs font-medium"
+                              style={{ color: "oklch(0.45 0.14 55)" }}
+                            >
+                              Sessions: {studentSessions[student] ?? 0}
+                            </span>
+                            <button
+                              type="button"
+                              data-ocid={`students.session_button.${i + 1}`}
+                              onClick={() =>
+                                setStudentSessions((prev) => ({
+                                  ...prev,
+                                  [student]: (prev[student] ?? 0) + 1,
+                                }))
+                              }
+                              className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                              style={{
+                                background: "oklch(0.62 0.16 50)",
+                                color: "white",
+                              }}
+                            >
+                              +
+                            </button>
+                          </div>
+                          <Input
+                            data-ocid={`students.notes.input.${i + 1}`}
+                            placeholder="Subject or notes..."
+                            value={studentNotes[student] ?? ""}
+                            onChange={(e) =>
+                              setStudentNotes((prev) => ({
+                                ...prev,
+                                [student]: e.target.value,
+                              }))
+                            }
+                            className="h-7 text-xs flex-1 rounded-lg border-0"
+                            style={{
+                              background: "oklch(0.92 0.02 60 / 0.8)",
+                              color: "oklch(0.32 0.08 55)",
+                            }}
+                          />
+                        </div>
+                      </motion.div>
                     );
                   })}
                 </CardContent>
@@ -1520,6 +2934,286 @@ function AppContent() {
                         className="h-2 rounded-full"
                         style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
                       />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Daily Goals */}
+              <Card className="card-journal rounded-2xl border-0">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle
+                      className="font-display text-xl"
+                      style={{ color: "oklch(0.32 0.15 225)" }}
+                    >
+                      🎯 Daily Goals
+                    </CardTitle>
+                    <Badge
+                      className="rounded-full text-xs px-2.5"
+                      style={{
+                        background: "oklch(0.5 0.18 225 / 0.1)",
+                        color: "oklch(0.42 0.15 225)",
+                        border: "1px solid oklch(0.6 0.15 225 / 0.3)",
+                      }}
+                    >
+                      {dailyGoals.filter((g) => g.done).length}/
+                      {dailyGoals.length} done
+                    </Badge>
+                  </div>
+                  {dailyGoals.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      <Progress
+                        value={pct(
+                          dailyGoals.filter((g) => g.done).length,
+                          dailyGoals.length,
+                        )}
+                        className="h-2 rounded-full"
+                        style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
+                      />
+                      <p
+                        className="text-xs"
+                        style={{ color: "oklch(0.52 0.1 225)" }}
+                      >
+                        {dailyGoals.filter((g) => g.done).length} of{" "}
+                        {dailyGoals.length} goals completed
+                      </p>
+                    </div>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      data-ocid="daily_goals.input"
+                      placeholder="Add a goal for today..."
+                      value={goalInput}
+                      onChange={(e) => setGoalInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addDailyGoal()}
+                      className="flex-1 rounded-xl border-0"
+                      style={{
+                        background: "oklch(0.94 0.022 225 / 0.5)",
+                        color: "oklch(0.25 0.05 225)",
+                      }}
+                    />
+                    <Button
+                      data-ocid="daily_goals.add_button"
+                      onClick={addDailyGoal}
+                      className="rounded-xl px-4 shrink-0"
+                      style={{
+                        background: "oklch(0.5 0.18 225)",
+                        color: "white",
+                      }}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {dailyGoals.length === 0 ? (
+                    <div
+                      data-ocid="daily_goals.empty_state"
+                      className="text-center py-8 rounded-xl"
+                      style={{ background: "oklch(0.96 0.018 225 / 0.5)" }}
+                    >
+                      <p className="text-2xl mb-2">🎯</p>
+                      <p
+                        className="font-medium"
+                        style={{ color: "oklch(0.5 0.1 225)" }}
+                      >
+                        No goals yet — add one above!
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <AnimatePresence mode="popLayout">
+                        {dailyGoals.map((goal, i) => (
+                          <motion.div
+                            key={goal.id}
+                            initial={{ opacity: 0, x: -16 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 16, height: 0 }}
+                            transition={{ duration: 0.25 }}
+                            data-ocid={`daily_goals.item.${i + 1}`}
+                            className="flex items-center gap-3 p-3 rounded-xl group transition-all"
+                            style={{
+                              background: goal.done
+                                ? "oklch(0.5 0.18 225 / 0.08)"
+                                : "oklch(0.96 0.018 225 / 0.5)",
+                              border: `1px solid ${goal.done ? "oklch(0.6 0.15 225 / 0.25)" : "oklch(0.88 0.022 225 / 0.5)"}`,
+                            }}
+                          >
+                            <Checkbox
+                              data-ocid={`daily_goals.checkbox.${i + 1}`}
+                              checked={goal.done}
+                              onCheckedChange={() => toggleDailyGoal(goal.id)}
+                              id={`goal-${goal.id}`}
+                            />
+                            <label
+                              htmlFor={`goal-${goal.id}`}
+                              className="flex-1 text-sm cursor-pointer leading-snug"
+                              style={{
+                                color: goal.done
+                                  ? "oklch(0.6 0.1 225)"
+                                  : "oklch(0.28 0.04 75)",
+                                textDecoration: goal.done
+                                  ? "line-through"
+                                  : "none",
+                                opacity: goal.done ? 0.7 : 1,
+                              }}
+                            >
+                              {goal.text}
+                            </label>
+                            <button
+                              type="button"
+                              data-ocid={`daily_goals.delete_button.${i + 1}`}
+                              onClick={() => deleteDailyGoal(goal.id)}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-opacity"
+                              style={{ color: "oklch(0.58 0.2 25)" }}
+                              aria-label="Delete goal"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Daily Goals */}
+              <Card className="card-journal rounded-2xl border-0">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle
+                      className="font-display text-xl"
+                      style={{ color: "oklch(0.32 0.15 225)" }}
+                    >
+                      🎯 Daily Goals
+                    </CardTitle>
+                    <Badge
+                      className="rounded-full text-xs px-2.5"
+                      style={{
+                        background: "oklch(0.5 0.18 225 / 0.1)",
+                        color: "oklch(0.42 0.15 225)",
+                        border: "1px solid oklch(0.6 0.15 225 / 0.3)",
+                      }}
+                    >
+                      {dailyGoals.filter((g) => g.done).length}/
+                      {dailyGoals.length} done
+                    </Badge>
+                  </div>
+                  {dailyGoals.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      <Progress
+                        value={pct(
+                          dailyGoals.filter((g) => g.done).length,
+                          dailyGoals.length,
+                        )}
+                        className="h-2 rounded-full"
+                        style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
+                      />
+                      <p
+                        className="text-xs"
+                        style={{ color: "oklch(0.52 0.1 225)" }}
+                      >
+                        {dailyGoals.filter((g) => g.done).length} of{" "}
+                        {dailyGoals.length} goals completed
+                      </p>
+                    </div>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      data-ocid="daily_goals.input"
+                      placeholder="Add a goal for today..."
+                      value={goalInput}
+                      onChange={(e) => setGoalInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addDailyGoal()}
+                      className="flex-1 rounded-xl border-0"
+                      style={{
+                        background: "oklch(0.94 0.022 225 / 0.5)",
+                        color: "oklch(0.25 0.05 225)",
+                      }}
+                    />
+                    <Button
+                      data-ocid="daily_goals.add_button"
+                      onClick={addDailyGoal}
+                      className="rounded-xl px-4 shrink-0"
+                      style={{
+                        background: "oklch(0.5 0.18 225)",
+                        color: "white",
+                      }}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {dailyGoals.length === 0 ? (
+                    <div
+                      data-ocid="daily_goals.empty_state"
+                      className="text-center py-8 rounded-xl"
+                      style={{ background: "oklch(0.96 0.018 225 / 0.5)" }}
+                    >
+                      <p className="text-2xl mb-2">🎯</p>
+                      <p
+                        className="font-medium"
+                        style={{ color: "oklch(0.5 0.1 225)" }}
+                      >
+                        No goals yet — add one above!
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <AnimatePresence mode="popLayout">
+                        {dailyGoals.map((goal, i) => (
+                          <motion.div
+                            key={goal.id}
+                            initial={{ opacity: 0, x: -16 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 16, height: 0 }}
+                            transition={{ duration: 0.25 }}
+                            data-ocid={`daily_goals.item.${i + 1}`}
+                            className="flex items-center gap-3 p-3 rounded-xl group transition-all"
+                            style={{
+                              background: goal.done
+                                ? "oklch(0.5 0.18 225 / 0.08)"
+                                : "oklch(0.96 0.018 225 / 0.5)",
+                              border: `1px solid ${goal.done ? "oklch(0.6 0.15 225 / 0.25)" : "oklch(0.88 0.022 225 / 0.5)"}`,
+                            }}
+                          >
+                            <Checkbox
+                              data-ocid={`daily_goals.checkbox.${i + 1}`}
+                              checked={goal.done}
+                              onCheckedChange={() => toggleDailyGoal(goal.id)}
+                              id={`goal-${goal.id}`}
+                            />
+                            <label
+                              htmlFor={`goal-${goal.id}`}
+                              className="flex-1 text-sm cursor-pointer leading-snug"
+                              style={{
+                                color: goal.done
+                                  ? "oklch(0.6 0.1 225)"
+                                  : "oklch(0.28 0.04 75)",
+                                textDecoration: goal.done
+                                  ? "line-through"
+                                  : "none",
+                                opacity: goal.done ? 0.7 : 1,
+                              }}
+                            >
+                              {goal.text}
+                            </label>
+                            <button
+                              type="button"
+                              data-ocid={`daily_goals.delete_button.${i + 1}`}
+                              onClick={() => deleteDailyGoal(goal.id)}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-opacity"
+                              style={{ color: "oklch(0.58 0.2 25)" }}
+                              aria-label="Delete goal"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
                     </div>
                   )}
                 </CardContent>
