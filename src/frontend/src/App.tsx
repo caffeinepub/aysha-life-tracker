@@ -282,7 +282,11 @@ function AppContent() {
     students: [],
   });
   const [monthlyIncome, setMonthlyIncome] = useState(0);
-  const [incomeInput, setIncomeInput] = useState("");
+  const [incomeEntries, setIncomeEntries] = useState<
+    { label: string; amount: number }[]
+  >([]);
+  const [incomeEntryLabel, setIncomeEntryLabel] = useState("");
+  const [incomeEntryAmount, setIncomeEntryAmount] = useState("");
   const [dailyTasks, setDailyTasks] = useState<Task[]>([]);
   const [taskInput, setTaskInput] = useState("");
 
@@ -309,7 +313,6 @@ function AppContent() {
           setCheckedItems(data.checkedItems);
           const inc = Number(data.monthlyIncome);
           setMonthlyIncome(inc);
-          setIncomeInput(inc > 0 ? String(inc) : "");
           setDailyTasks(data.dailyTasks);
         }
         isLoaded.current = true;
@@ -390,12 +393,32 @@ function AppContent() {
     setDailyTasks((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleIncomeChange = (val: string) => {
-    setIncomeInput(val);
-    const num = Number.parseFloat(val);
-    if (!Number.isNaN(num) && num >= 0) {
-      setMonthlyIncome(num);
-    }
+  // Sync monthlyIncome from entries
+  useEffect(() => {
+    if (incomeEntries.length === 0) return;
+    const total = incomeEntries.reduce((sum, e) => sum + e.amount, 0);
+    setMonthlyIncome(total);
+  }, [incomeEntries]);
+
+  const handleAddIncomeEntry = () => {
+    const amt = Number.parseFloat(incomeEntryAmount);
+    if (!incomeEntryLabel.trim() || Number.isNaN(amt) || amt <= 0) return;
+    setIncomeEntries((prev) => [
+      ...prev,
+      { label: incomeEntryLabel.trim(), amount: amt },
+    ]);
+    setIncomeEntryLabel("");
+    setIncomeEntryAmount("");
+  };
+
+  const handleDeleteIncomeEntry = (idx: number) => {
+    setIncomeEntries((prev) => {
+      const next = prev.filter((_, i) => i !== idx);
+      if (next.length === 0) {
+        setMonthlyIncome(0);
+      }
+      return next;
+    });
   };
 
   const pct = (done: number, total: number) =>
@@ -1124,29 +1147,110 @@ function AppContent() {
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-4 pt-4">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="text-xl font-bold px-3 py-2 rounded-lg"
-                        style={{
-                          background: "oklch(0.92 0.04 60)",
-                          color: "oklch(0.42 0.14 50)",
-                        }}
-                      >
-                        ₹
-                      </span>
+                    {/* Add income entry */}
+                    <div className="space-y-2">
                       <Input
-                        data-ocid="career.income.input"
-                        type="number"
-                        placeholder="Enter monthly income"
-                        value={incomeInput}
-                        onChange={(e) => handleIncomeChange(e.target.value)}
-                        className="flex-1 rounded-xl border-0 text-base font-medium"
+                        data-ocid="income.label_input"
+                        type="text"
+                        placeholder="Income source (e.g. Student Name)"
+                        value={incomeEntryLabel}
+                        onChange={(e) => setIncomeEntryLabel(e.target.value)}
+                        className="rounded-xl border-0 text-base"
                         style={{
                           background: "oklch(0.95 0.02 60)",
                           color: "oklch(0.25 0.04 60)",
                         }}
                       />
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="text-xl font-bold px-3 py-2 rounded-lg"
+                          style={{
+                            background: "oklch(0.92 0.04 60)",
+                            color: "oklch(0.42 0.14 50)",
+                          }}
+                        >
+                          ₹
+                        </span>
+                        <Input
+                          data-ocid="income.amount_input"
+                          type="number"
+                          placeholder="Amount"
+                          value={incomeEntryAmount}
+                          onChange={(e) => setIncomeEntryAmount(e.target.value)}
+                          onKeyDown={(e) =>
+                            e.key === "Enter" && handleAddIncomeEntry()
+                          }
+                          className="flex-1 rounded-xl border-0 text-base font-medium"
+                          style={{
+                            background: "oklch(0.95 0.02 60)",
+                            color: "oklch(0.25 0.04 60)",
+                          }}
+                        />
+                        <Button
+                          data-ocid="income.add_button"
+                          onClick={handleAddIncomeEntry}
+                          className="rounded-xl px-4 font-semibold"
+                          style={{
+                            background: "oklch(0.62 0.18 50)",
+                            color: "white",
+                          }}
+                        >
+                          Add
+                        </Button>
+                      </div>
                     </div>
+
+                    {/* Income entries list */}
+                    {incomeEntries.length > 0 && (
+                      <div className="space-y-2">
+                        {incomeEntries.map((entry, idx) => (
+                          <div
+                            key={`${entry.label}-${entry.amount}-${idx}`}
+                            data-ocid={`income.item.${idx + 1}`}
+                            className="flex items-center justify-between px-3 py-2 rounded-xl"
+                            style={{
+                              background: "oklch(0.94 0.03 60 / 0.7)",
+                              border: "1px solid oklch(0.85 0.06 55 / 0.3)",
+                            }}
+                          >
+                            <span
+                              className="text-sm font-medium"
+                              style={{ color: "oklch(0.38 0.12 55)" }}
+                            >
+                              {entry.label}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="text-sm font-bold"
+                                style={{ color: "oklch(0.42 0.16 50)" }}
+                              >
+                                ₹{entry.amount.toLocaleString("en-IN")}
+                              </span>
+                              <button
+                                type="button"
+                                data-ocid={`income.delete_button.${idx + 1}`}
+                                onClick={() => handleDeleteIncomeEntry(idx)}
+                                className="text-xs px-2 py-1 rounded-lg transition-colors hover:opacity-80"
+                                style={{
+                                  background: "oklch(0.88 0.06 25 / 0.4)",
+                                  color: "oklch(0.45 0.15 25)",
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {incomeEntries.length === 0 && (
+                      <p
+                        className="text-xs text-center py-1"
+                        style={{ color: "oklch(0.65 0.06 55)" }}
+                      >
+                        No entries yet — add your income sources above
+                      </p>
+                    )}
 
                     {/* Income display */}
                     <div
