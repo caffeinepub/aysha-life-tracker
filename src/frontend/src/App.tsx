@@ -25,6 +25,27 @@ import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { CheckedItems, Task } from "./backend.d";
+import {
+  AchievementBadges,
+  AchievementTimeline,
+  EmergencyResetButton,
+  EnergyMoodTracker,
+  ExamPrepMeter,
+  FutureAyshaMessage,
+  HabitHeatmap,
+  LifeBalanceWheel,
+  LifeProgressBar,
+  LifeTimeline,
+  MonthlyReport,
+  MonthlyWins,
+  PersonalReadingTracker,
+  PrayerTimeReminder,
+  QuoteOfDay,
+  SmartWeeklyReview,
+  VisionSection,
+  WeeklyPlanningBoard,
+  WeeklyReflection,
+} from "./components/NewFeatures";
 
 const queryClient = new QueryClient();
 
@@ -359,6 +380,21 @@ function AppContent() {
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     return localStorage.getItem("dark_mode") === "true";
   });
+
+  // Salah count for Life Progress Bar
+  const [salahCount, setSalahCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("salah_checked");
+      if (!saved) return 0;
+      const parsed = JSON.parse(saved);
+      return Object.values(parsed).filter(Boolean).length;
+    } catch {
+      return 0;
+    }
+  });
+
+  // Focus Mode
+  const [focusMode, setFocusMode] = useState(false);
 
   // MA Exam Countdown
   const [examDate, setExamDate] = useState<string>(() => {
@@ -802,6 +838,21 @@ function AppContent() {
                 style={{ color: "oklch(0.85 0.14 80)" }}
               />
             </div>
+            {/* Dynamic time greeting */}
+            <p
+              className="text-base font-semibold mb-2"
+              style={{ color: "oklch(0.88 0.12 80)" }}
+            >
+              {(() => {
+                const hr = new Date().getHours();
+                const firstFocus = focusItems[0]?.detail || "your top priority";
+                if (hr >= 6 && hr < 12)
+                  return `Good morning, Aysha 🌅 — Today's Focus: ${firstFocus}`;
+                if (hr >= 12 && hr < 18)
+                  return "Good afternoon, Aysha ☀️ — Keep going!";
+                return "Good evening 🌙 — Reflection: What went well today?";
+              })()}
+            </p>
             <h1
               className="font-display text-4xl md:text-5xl lg:text-6xl font-bold mb-3"
               style={{ color: "oklch(0.97 0.01 75)" }}
@@ -816,6 +867,27 @@ function AppContent() {
             </p>
           </motion.div>
 
+          {/* Focus Mode button */}
+          <div className="absolute top-4 left-4">
+            <button
+              type="button"
+              data-ocid="header.focus_mode.toggle"
+              onClick={() => setFocusMode((prev) => !prev)}
+              className="px-3 py-2 rounded-full transition-all text-sm font-semibold"
+              style={{
+                background: focusMode
+                  ? "oklch(0.55 0.22 55 / 0.4)"
+                  : "oklch(1 0 0 / 0.12)",
+                border: "1px solid oklch(1 0 0 / 0.2)",
+                color: focusMode
+                  ? "oklch(0.92 0.12 75)"
+                  : "oklch(0.88 0.08 80)",
+              }}
+              aria-label="Toggle focus mode"
+            >
+              {focusMode ? "Exit Focus Mode" : "⚡ Focus Mode"}
+            </button>
+          </div>
           {/* Dark mode toggle */}
           <div className="absolute top-4 right-4">
             <button
@@ -888,6 +960,16 @@ function AppContent() {
 
       {/* Main content */}
       <main className="container mx-auto px-4 py-8 max-w-5xl">
+        {/* ──────────────── LIFE PROGRESS BAR ──────────────── */}
+        {!focusMode && (
+          <LifeProgressBar
+            salahCount={salahCount}
+            studyHoursToday={weeklyHours[todayDayKey] || 0}
+            focusDone={focusItems.filter((f) => f.done).length}
+            focusTotal={focusItems.length}
+          />
+        )}
+
         {/* ──────────────── MA EXAM COUNTDOWN ──────────────── */}
         <div
           data-ocid="exam_countdown.card"
@@ -977,430 +1059,495 @@ function AppContent() {
           )}
         </div>
 
-        {/* ──────────────── STATS SUMMARY ──────────────── */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div
-            data-ocid="stats.study_hours.card"
-            className="rounded-2xl p-4 text-center"
-            style={{
-              background:
-                "linear-gradient(135deg, oklch(0.96 0.03 225), oklch(0.93 0.04 215))",
-              border: "1px solid oklch(0.85 0.04 225 / 0.5)",
-            }}
-          >
+        {/* ──────────────── QUOTE OF THE DAY ──────────────── */}
+        {!focusMode && <QuoteOfDay />}
+        {!focusMode && (
+          <div className="grid grid-cols-3 gap-3 mb-6">
             <div
-              className="text-2xl font-bold font-display"
-              style={{ color: "oklch(0.38 0.16 225)" }}
+              data-ocid="stats.study_hours.card"
+              className="rounded-2xl p-4 text-center"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.96 0.03 225), oklch(0.93 0.04 215))",
+                border: "1px solid oklch(0.85 0.04 225 / 0.5)",
+              }}
             >
-              {totalWeeklyHours.toFixed(1)}h
+              <div
+                className="text-2xl font-bold font-display"
+                style={{ color: "oklch(0.38 0.16 225)" }}
+              >
+                {totalWeeklyHours.toFixed(1)}h
+              </div>
+              <div
+                className="text-xs mt-0.5"
+                style={{ color: "oklch(0.55 0.1 225)" }}
+              >
+                Study Hours
+              </div>
+              <div
+                className="text-xs"
+                style={{ color: "oklch(0.65 0.08 225)" }}
+              >
+                This Week
+              </div>
             </div>
             <div
-              className="text-xs mt-0.5"
-              style={{ color: "oklch(0.55 0.1 225)" }}
+              data-ocid="stats.books_completed.card"
+              className="rounded-2xl p-4 text-center"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.96 0.025 155), oklch(0.93 0.03 145))",
+                border: "1px solid oklch(0.85 0.03 155 / 0.5)",
+              }}
             >
-              Study Hours
+              <div
+                className="text-2xl font-bold font-display"
+                style={{ color: "oklch(0.38 0.14 155)" }}
+              >
+                {booksCompletedCount}
+              </div>
+              <div
+                className="text-xs mt-0.5"
+                style={{ color: "oklch(0.5 0.1 155)" }}
+              >
+                Books
+              </div>
+              <div className="text-xs" style={{ color: "oklch(0.6 0.08 155)" }}>
+                Completed
+              </div>
             </div>
-            <div className="text-xs" style={{ color: "oklch(0.65 0.08 225)" }}>
-              This Week
+            <div
+              data-ocid="stats.tasks_completed.card"
+              className="rounded-2xl p-4 text-center"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.96 0.03 60), oklch(0.93 0.04 50))",
+                border: "1px solid oklch(0.85 0.04 55 / 0.5)",
+              }}
+            >
+              <div
+                className="text-2xl font-bold font-display"
+                style={{ color: "oklch(0.38 0.16 50)" }}
+              >
+                {tasksCompletedCount}
+              </div>
+              <div
+                className="text-xs mt-0.5"
+                style={{ color: "oklch(0.52 0.12 55)" }}
+              >
+                Tasks
+              </div>
+              <div className="text-xs" style={{ color: "oklch(0.62 0.1 55)" }}>
+                Completed
+              </div>
             </div>
           </div>
-          <div
-            data-ocid="stats.books_completed.card"
-            className="rounded-2xl p-4 text-center"
-            style={{
-              background:
-                "linear-gradient(135deg, oklch(0.96 0.025 155), oklch(0.93 0.03 145))",
-              border: "1px solid oklch(0.85 0.03 155 / 0.5)",
-            }}
-          >
-            <div
-              className="text-2xl font-bold font-display"
-              style={{ color: "oklch(0.38 0.14 155)" }}
-            >
-              {booksCompletedCount}
-            </div>
-            <div
-              className="text-xs mt-0.5"
-              style={{ color: "oklch(0.5 0.1 155)" }}
-            >
-              Books
-            </div>
-            <div className="text-xs" style={{ color: "oklch(0.6 0.08 155)" }}>
-              Completed
-            </div>
-          </div>
-          <div
-            data-ocid="stats.tasks_completed.card"
-            className="rounded-2xl p-4 text-center"
-            style={{
-              background:
-                "linear-gradient(135deg, oklch(0.96 0.03 60), oklch(0.93 0.04 50))",
-              border: "1px solid oklch(0.85 0.04 55 / 0.5)",
-            }}
-          >
-            <div
-              className="text-2xl font-bold font-display"
-              style={{ color: "oklch(0.38 0.16 50)" }}
-            >
-              {tasksCompletedCount}
-            </div>
-            <div
-              className="text-xs mt-0.5"
-              style={{ color: "oklch(0.52 0.12 55)" }}
-            >
-              Tasks
-            </div>
-            <div className="text-xs" style={{ color: "oklch(0.62 0.1 55)" }}>
-              Completed
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* ──────────────── TODAY'S REMINDER + FOCUS ──────────────── */}
-        <div className="grid gap-4 md:grid-cols-2 mb-6">
-          {/* Reminder */}
-          <div
-            data-ocid="reminder.card"
-            className="rounded-2xl p-5"
-            style={{
-              background:
-                "linear-gradient(135deg, oklch(0.98 0.02 80), oklch(0.95 0.04 70))",
-              border: "1px solid oklch(0.88 0.05 75 / 0.6)",
-            }}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <span
-                className="font-display font-semibold text-base"
-                style={{ color: "oklch(0.38 0.12 60)" }}
-              >
-                ✨ Today&apos;s Reminder
-              </span>
-              <div className="flex gap-1">
-                <button
-                  type="button"
-                  data-ocid="reminder.cycle_button"
-                  onClick={() => {
-                    setReminderIdx(
-                      (prev) => (prev + 1) % REMINDER_QUOTES.length,
-                    );
-                    setCustomReminder("");
-                  }}
-                  className="px-2 py-1 rounded-lg text-xs"
-                  style={{
-                    background: "oklch(0.88 0.04 70 / 0.6)",
-                    color: "oklch(0.48 0.1 60)",
-                  }}
+        {!focusMode && (
+          <div className="grid gap-4 md:grid-cols-2 mb-6">
+            {/* Reminder */}
+            <div
+              data-ocid="reminder.card"
+              className="rounded-2xl p-5"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.98 0.02 80), oklch(0.95 0.04 70))",
+                border: "1px solid oklch(0.88 0.05 75 / 0.6)",
+              }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span
+                  className="font-display font-semibold text-base"
+                  style={{ color: "oklch(0.38 0.12 60)" }}
                 >
-                  Next
-                </button>
-                <button
-                  type="button"
-                  data-ocid="reminder.edit_button"
-                  onClick={() => setEditingReminder(!editingReminder)}
-                  className="px-2 py-1 rounded-lg text-xs"
-                  style={{
-                    background: "oklch(0.88 0.04 70 / 0.6)",
-                    color: "oklch(0.48 0.1 60)",
-                  }}
-                >
-                  <Pencil className="w-3 h-3 inline" />
-                </button>
+                  ✨ Today&apos;s Reminder
+                </span>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    data-ocid="reminder.cycle_button"
+                    onClick={() => {
+                      setReminderIdx(
+                        (prev) => (prev + 1) % REMINDER_QUOTES.length,
+                      );
+                      setCustomReminder("");
+                    }}
+                    className="px-2 py-1 rounded-lg text-xs"
+                    style={{
+                      background: "oklch(0.88 0.04 70 / 0.6)",
+                      color: "oklch(0.48 0.1 60)",
+                    }}
+                  >
+                    Next
+                  </button>
+                  <button
+                    type="button"
+                    data-ocid="reminder.edit_button"
+                    onClick={() => setEditingReminder(!editingReminder)}
+                    className="px-2 py-1 rounded-lg text-xs"
+                    style={{
+                      background: "oklch(0.88 0.04 70 / 0.6)",
+                      color: "oklch(0.48 0.1 60)",
+                    }}
+                  >
+                    <Pencil className="w-3 h-3 inline" />
+                  </button>
+                </div>
               </div>
+              {editingReminder ? (
+                <div className="space-y-2">
+                  <textarea
+                    data-ocid="reminder.textarea"
+                    value={customReminder || currentReminder}
+                    onChange={(e) => setCustomReminder(e.target.value)}
+                    rows={3}
+                    className="w-full rounded-xl p-2 text-sm resize-none"
+                    style={{
+                      background: "oklch(0.92 0.025 75 / 0.5)",
+                      color: "oklch(0.32 0.08 60)",
+                      border: "1px solid oklch(0.8 0.05 70 / 0.5)",
+                    }}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      data-ocid="reminder.save_button"
+                      onClick={() => {
+                        localStorage.setItem("custom_reminder", customReminder);
+                        setEditingReminder(false);
+                      }}
+                      className="px-3 py-1 rounded-lg text-xs font-semibold"
+                      style={{
+                        background: "oklch(0.5 0.16 150)",
+                        color: "white",
+                      }}
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      data-ocid="reminder.cancel_button"
+                      onClick={() => setEditingReminder(false)}
+                      className="px-3 py-1 rounded-lg text-xs"
+                      style={{
+                        background: "oklch(0.88 0.03 60)",
+                        color: "oklch(0.45 0.08 60)",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p
+                  className="text-sm italic leading-relaxed"
+                  style={{ color: "oklch(0.42 0.1 60)" }}
+                >
+                  &ldquo;{currentReminder}&rdquo;
+                </p>
+              )}
             </div>
-            {editingReminder ? (
-              <div className="space-y-2">
-                <textarea
-                  data-ocid="reminder.textarea"
-                  value={customReminder || currentReminder}
-                  onChange={(e) => setCustomReminder(e.target.value)}
-                  rows={3}
-                  className="w-full rounded-xl p-2 text-sm resize-none"
+
+            {/* Today's Focus */}
+            <div
+              data-ocid="focus.card"
+              className="rounded-2xl p-5"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.97 0.025 285), oklch(0.94 0.03 275))",
+                border: "1px solid oklch(0.85 0.04 285 / 0.5)",
+              }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span
+                  className="font-display font-semibold text-base"
+                  style={{ color: "oklch(0.35 0.12 285)" }}
+                >
+                  🎯 Today&apos;s Focus
+                </span>
+              </div>
+              <div className="space-y-1.5 mb-3">
+                {focusItems.map((item, i) => (
+                  <div
+                    key={`focus-${item.label}-${i}`}
+                    data-ocid={`focus.item.${i + 1}`}
+                    className="flex items-center gap-2"
+                  >
+                    <Checkbox
+                      data-ocid={`focus.checkbox.${i + 1}`}
+                      checked={item.done}
+                      onCheckedChange={() => {
+                        const next = focusItems.map((f, idx) =>
+                          idx === i ? { ...f, done: !f.done } : f,
+                        );
+                        saveFocusItems(next);
+                      }}
+                      id={`focus-${i}`}
+                    />
+                    <label
+                      htmlFor={`focus-${i}`}
+                      className="text-sm flex-1 cursor-pointer"
+                      style={{
+                        color: item.done
+                          ? "oklch(0.6 0.06 285)"
+                          : "oklch(0.32 0.08 285)",
+                        textDecoration: item.done ? "line-through" : "none",
+                      }}
+                    >
+                      <span className="font-semibold">{item.label}:</span>{" "}
+                      {item.detail}
+                    </label>
+                    <button
+                      type="button"
+                      data-ocid={`focus.delete_button.${i + 1}`}
+                      onClick={() =>
+                        saveFocusItems(focusItems.filter((_, idx) => idx !== i))
+                      }
+                      className="p-1 rounded opacity-0 group-hover:opacity-100 hover:opacity-100"
+                      style={{ color: "oklch(0.55 0.18 25)" }}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-1.5">
+                <Input
+                  data-ocid="focus.label.input"
+                  placeholder="Label"
+                  value={focusInput}
+                  onChange={(e) => setFocusInput(e.target.value)}
+                  className="flex-1 rounded-lg border-0 text-xs h-8"
                   style={{
-                    background: "oklch(0.92 0.025 75 / 0.5)",
-                    color: "oklch(0.32 0.08 60)",
-                    border: "1px solid oklch(0.8 0.05 70 / 0.5)",
+                    background: "oklch(0.9 0.025 285 / 0.5)",
+                    color: "oklch(0.28 0.06 285)",
                   }}
                 />
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    data-ocid="reminder.save_button"
-                    onClick={() => {
-                      localStorage.setItem("custom_reminder", customReminder);
-                      setEditingReminder(false);
-                    }}
-                    className="px-3 py-1 rounded-lg text-xs font-semibold"
-                    style={{
-                      background: "oklch(0.5 0.16 150)",
-                      color: "white",
-                    }}
-                  >
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    data-ocid="reminder.cancel_button"
-                    onClick={() => setEditingReminder(false)}
-                    className="px-3 py-1 rounded-lg text-xs"
-                    style={{
-                      background: "oklch(0.88 0.03 60)",
-                      color: "oklch(0.45 0.08 60)",
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
+                <Input
+                  data-ocid="focus.detail.input"
+                  placeholder="Detail"
+                  value={focusDetailInput}
+                  onChange={(e) => setFocusDetailInput(e.target.value)}
+                  className="flex-1 rounded-lg border-0 text-xs h-8"
+                  style={{
+                    background: "oklch(0.9 0.025 285 / 0.5)",
+                    color: "oklch(0.28 0.06 285)",
+                  }}
+                />
+                <Button
+                  data-ocid="focus.add_button"
+                  onClick={() => {
+                    if (!focusInput.trim()) return;
+                    saveFocusItems([
+                      ...focusItems,
+                      {
+                        label: focusInput.trim(),
+                        detail: focusDetailInput.trim(),
+                        done: false,
+                      },
+                    ]);
+                    setFocusInput("");
+                    setFocusDetailInput("");
+                  }}
+                  className="h-8 px-2 rounded-lg"
+                  style={{ background: "oklch(0.48 0.16 285)", color: "white" }}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </Button>
               </div>
-            ) : (
-              <p
-                className="text-sm italic leading-relaxed"
-                style={{ color: "oklch(0.42 0.1 60)" }}
-              >
-                &ldquo;{currentReminder}&rdquo;
-              </p>
-            )}
-          </div>
-
-          {/* Today's Focus */}
-          <div
-            data-ocid="focus.card"
-            className="rounded-2xl p-5"
-            style={{
-              background:
-                "linear-gradient(135deg, oklch(0.97 0.025 285), oklch(0.94 0.03 275))",
-              border: "1px solid oklch(0.85 0.04 285 / 0.5)",
-            }}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <span
-                className="font-display font-semibold text-base"
-                style={{ color: "oklch(0.35 0.12 285)" }}
-              >
-                🎯 Today&apos;s Focus
-              </span>
-            </div>
-            <div className="space-y-1.5 mb-3">
-              {focusItems.map((item, i) => (
-                <div
-                  key={`focus-${item.label}-${i}`}
-                  data-ocid={`focus.item.${i + 1}`}
-                  className="flex items-center gap-2"
-                >
-                  <Checkbox
-                    data-ocid={`focus.checkbox.${i + 1}`}
-                    checked={item.done}
-                    onCheckedChange={() => {
-                      const next = focusItems.map((f, idx) =>
-                        idx === i ? { ...f, done: !f.done } : f,
-                      );
-                      saveFocusItems(next);
-                    }}
-                    id={`focus-${i}`}
-                  />
-                  <label
-                    htmlFor={`focus-${i}`}
-                    className="text-sm flex-1 cursor-pointer"
-                    style={{
-                      color: item.done
-                        ? "oklch(0.6 0.06 285)"
-                        : "oklch(0.32 0.08 285)",
-                      textDecoration: item.done ? "line-through" : "none",
-                    }}
-                  >
-                    <span className="font-semibold">{item.label}:</span>{" "}
-                    {item.detail}
-                  </label>
-                  <button
-                    type="button"
-                    data-ocid={`focus.delete_button.${i + 1}`}
-                    onClick={() =>
-                      saveFocusItems(focusItems.filter((_, idx) => idx !== i))
-                    }
-                    className="p-1 rounded opacity-0 group-hover:opacity-100 hover:opacity-100"
-                    style={{ color: "oklch(0.55 0.18 25)" }}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-1.5">
-              <Input
-                data-ocid="focus.label.input"
-                placeholder="Label"
-                value={focusInput}
-                onChange={(e) => setFocusInput(e.target.value)}
-                className="flex-1 rounded-lg border-0 text-xs h-8"
-                style={{
-                  background: "oklch(0.9 0.025 285 / 0.5)",
-                  color: "oklch(0.28 0.06 285)",
-                }}
-              />
-              <Input
-                data-ocid="focus.detail.input"
-                placeholder="Detail"
-                value={focusDetailInput}
-                onChange={(e) => setFocusDetailInput(e.target.value)}
-                className="flex-1 rounded-lg border-0 text-xs h-8"
-                style={{
-                  background: "oklch(0.9 0.025 285 / 0.5)",
-                  color: "oklch(0.28 0.06 285)",
-                }}
-              />
-              <Button
-                data-ocid="focus.add_button"
-                onClick={() => {
-                  if (!focusInput.trim()) return;
-                  saveFocusItems([
-                    ...focusItems,
-                    {
-                      label: focusInput.trim(),
-                      detail: focusDetailInput.trim(),
-                      done: false,
-                    },
-                  ]);
-                  setFocusInput("");
-                  setFocusDetailInput("");
-                }}
-                className="h-8 px-2 rounded-lg"
-                style={{ background: "oklch(0.48 0.16 285)", color: "white" }}
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </Button>
             </div>
           </div>
-        </div>
+        )}
 
+        {/* ──────────────── PRAYER TIME + SALAH ──────────────── */}
+        {!focusMode && (
+          <PrayerTimeReminder onSalahCountChange={setSalahCount} />
+        )}
+
+        {/* ──────────────── LIFE BALANCE WHEEL + EXAM PREP ──────────────── */}
+        {!focusMode && (
+          <div className="grid gap-4 md:grid-cols-2 mb-6">
+            <LifeBalanceWheel />
+            <ExamPrepMeter />
+          </div>
+        )}
+
+        {/* ──────────────── HABIT HEATMAP ──────────────── */}
+        {!focusMode && <HabitHeatmap />}
+
+        {/* ──────────────── SMART WEEKLY REVIEW + WEEKLY REFLECTION ──────────────── */}
+        {!focusMode && (
+          <div className="grid gap-4 md:grid-cols-2 mb-6">
+            <SmartWeeklyReview
+              weeklyHoursTotal={totalWeeklyHours}
+              riyalahPct={riyalahPct}
+              certsCompleted={checkedItems.certificates.length}
+              incomeTotal={monthlyIncome}
+            />
+            <WeeklyReflection />
+          </div>
+        )}
+
+        {/* ──────────────── WEEKLY PLANNING BOARD ──────────────── */}
+        {!focusMode && <WeeklyPlanningBoard />}
         {/* ──────────────── STUDY HOURS + WINS ──────────────── */}
-        <div className="grid gap-4 md:grid-cols-2 mb-6">
-          {/* Study Hours This Week */}
-          <div
-            data-ocid="study_hours.card"
-            className="rounded-2xl p-5"
-            style={{
-              background:
-                "linear-gradient(135deg, oklch(0.96 0.03 225), oklch(0.93 0.04 215))",
-              border: "1px solid oklch(0.85 0.04 225 / 0.5)",
-            }}
-          >
+        {!focusMode && (
+          <div className="grid gap-4 md:grid-cols-2 mb-6">
+            {/* Study Hours This Week */}
             <div
-              className="font-display font-semibold text-base mb-3"
-              style={{ color: "oklch(0.35 0.14 225)" }}
+              data-ocid="study_hours.card"
+              className="rounded-2xl p-5"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.96 0.03 225), oklch(0.93 0.04 215))",
+                border: "1px solid oklch(0.85 0.04 225 / 0.5)",
+              }}
             >
-              📊 Study Hours This Week
-            </div>
-            <div className="space-y-1.5 mb-3">
-              {DAYS_OF_WEEK.map((day) => {
-                const hours = weeklyHours[day] || 0;
-                const maxH = Math.max(...Object.values(weeklyHours), 1);
-                return (
-                  <div key={day} className="flex items-center gap-2">
-                    <span
-                      className="text-xs w-7 shrink-0 font-medium"
-                      style={{ color: "oklch(0.48 0.12 225)" }}
-                    >
-                      {day}
-                    </span>
-                    <div
-                      className="flex-1 h-3 rounded-full overflow-hidden"
-                      style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
-                    >
+              <div
+                className="font-display font-semibold text-base mb-3"
+                style={{ color: "oklch(0.35 0.14 225)" }}
+              >
+                📊 Study Hours This Week
+              </div>
+              <div className="space-y-1.5 mb-3">
+                {DAYS_OF_WEEK.map((day) => {
+                  const hours = weeklyHours[day] || 0;
+                  const maxH = Math.max(...Object.values(weeklyHours), 1);
+                  return (
+                    <div key={day} className="flex items-center gap-2">
+                      <span
+                        className="text-xs w-7 shrink-0 font-medium"
+                        style={{ color: "oklch(0.48 0.12 225)" }}
+                      >
+                        {day}
+                      </span>
                       <div
-                        className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${(hours / maxH) * 100}%`,
-                          background:
-                            day === todayDayKey
-                              ? "linear-gradient(90deg, oklch(0.5 0.18 225), oklch(0.6 0.16 200))"
-                              : "oklch(0.65 0.12 225 / 0.7)",
-                        }}
-                      />
+                        className="flex-1 h-3 rounded-full overflow-hidden"
+                        style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
+                      >
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${(hours / maxH) * 100}%`,
+                            background:
+                              day === todayDayKey
+                                ? "linear-gradient(90deg, oklch(0.5 0.18 225), oklch(0.6 0.16 200))"
+                                : "oklch(0.65 0.12 225 / 0.7)",
+                          }}
+                        />
+                      </div>
+                      <span
+                        className="text-xs w-8 text-right shrink-0"
+                        style={{ color: "oklch(0.5 0.1 225)" }}
+                      >
+                        {hours >= 1
+                          ? `${hours.toFixed(1)}h`
+                          : `${Math.round(hours * 60)}m`}
+                      </span>
                     </div>
-                    <span
-                      className="text-xs w-8 text-right shrink-0"
-                      style={{ color: "oklch(0.5 0.1 225)" }}
-                    >
-                      {hours >= 1
-                        ? `${hours.toFixed(1)}h`
-                        : `${Math.round(hours * 60)}m`}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                data-ocid="study_hours.add_input"
-                type="number"
-                placeholder="Add minutes"
-                value={addMinutesInput}
-                onChange={(e) => setAddMinutesInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addStudyMinutes()}
-                className="flex-1 rounded-xl border-0 text-sm h-8"
-                style={{
-                  background: "oklch(0.9 0.025 225 / 0.5)",
-                  color: "oklch(0.28 0.08 225)",
-                }}
-              />
-              <Button
-                data-ocid="study_hours.add_button"
-                onClick={addStudyMinutes}
-                className="h-8 px-3 rounded-xl text-xs"
-                style={{ background: "oklch(0.5 0.18 225)", color: "white" }}
-              >
-                + Add
-              </Button>
-            </div>
-          </div>
-
-          {/* Today's 3 Wins */}
-          <div
-            data-ocid="wins.card"
-            className="rounded-2xl p-5"
-            style={{
-              background:
-                "linear-gradient(135deg, oklch(0.97 0.03 55), oklch(0.94 0.04 45))",
-              border: "1px solid oklch(0.86 0.05 55 / 0.5)",
-            }}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <Trophy
-                className="w-5 h-5"
-                style={{ color: "oklch(0.58 0.2 55)" }}
-              />
-              <span
-                className="font-display font-semibold text-base"
-                style={{ color: "oklch(0.38 0.14 55)" }}
-              >
-                Today&apos;s 3 Wins
-              </span>
-            </div>
-            <div className="space-y-2.5">
-              {wins.map((win, i) => (
-                <div
-                  key={`win-${win.label}-${i}`}
-                  data-ocid={`wins.item.${i + 1}`}
-                  className="flex items-center gap-3"
+                  );
+                })}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  data-ocid="study_hours.add_input"
+                  type="number"
+                  placeholder="Add minutes"
+                  value={addMinutesInput}
+                  onChange={(e) => setAddMinutesInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addStudyMinutes()}
+                  className="flex-1 rounded-xl border-0 text-sm h-8"
+                  style={{
+                    background: "oklch(0.9 0.025 225 / 0.5)",
+                    color: "oklch(0.28 0.08 225)",
+                  }}
+                />
+                <Button
+                  data-ocid="study_hours.add_button"
+                  onClick={addStudyMinutes}
+                  className="h-8 px-3 rounded-xl text-xs"
+                  style={{ background: "oklch(0.5 0.18 225)", color: "white" }}
                 >
-                  <Checkbox
-                    data-ocid={`wins.checkbox.${i + 1}`}
-                    checked={win.done}
-                    onCheckedChange={() =>
-                      saveWins(
-                        wins.map((w, idx) =>
-                          idx === i ? { ...w, done: !w.done } : w,
-                        ),
-                      )
-                    }
-                    id={`win-${i}`}
-                  />
-                  {editingWinIdx === i ? (
-                    <div className="flex gap-1.5 flex-1">
-                      <Input
-                        value={editingWinLabel}
-                        onChange={(e) => setEditingWinLabel(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
+                  + Add
+                </Button>
+              </div>
+            </div>
+
+            {/* Today's 3 Wins */}
+            <div
+              data-ocid="wins.card"
+              className="rounded-2xl p-5"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.97 0.03 55), oklch(0.94 0.04 45))",
+                border: "1px solid oklch(0.86 0.05 55 / 0.5)",
+              }}
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <Trophy
+                  className="w-5 h-5"
+                  style={{ color: "oklch(0.58 0.2 55)" }}
+                />
+                <span
+                  className="font-display font-semibold text-base"
+                  style={{ color: "oklch(0.38 0.14 55)" }}
+                >
+                  Today&apos;s 3 Wins
+                </span>
+              </div>
+              <div className="space-y-2.5">
+                {wins.map((win, i) => (
+                  <div
+                    key={`win-${win.label}-${i}`}
+                    data-ocid={`wins.item.${i + 1}`}
+                    className="flex items-center gap-3"
+                  >
+                    <Checkbox
+                      data-ocid={`wins.checkbox.${i + 1}`}
+                      checked={win.done}
+                      onCheckedChange={() =>
+                        saveWins(
+                          wins.map((w, idx) =>
+                            idx === i ? { ...w, done: !w.done } : w,
+                          ),
+                        )
+                      }
+                      id={`win-${i}`}
+                    />
+                    {editingWinIdx === i ? (
+                      <div className="flex gap-1.5 flex-1">
+                        <Input
+                          value={editingWinLabel}
+                          onChange={(e) => setEditingWinLabel(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              saveWins(
+                                wins.map((w, idx) =>
+                                  idx === i
+                                    ? {
+                                        ...w,
+                                        label:
+                                          editingWinLabel.trim() || w.label,
+                                      }
+                                    : w,
+                                ),
+                              );
+                              setEditingWinIdx(null);
+                            }
+                            if (e.key === "Escape") setEditingWinIdx(null);
+                          }}
+                          autoFocus
+                          className="flex-1 rounded-lg border-0 h-7 text-sm"
+                          style={{
+                            background: "oklch(0.9 0.03 55 / 0.5)",
+                            color: "oklch(0.3 0.1 55)",
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
                             saveWins(
                               wins.map((w, idx) =>
                                 idx === i
@@ -1412,153 +1559,132 @@ function AppContent() {
                               ),
                             );
                             setEditingWinIdx(null);
-                          }
-                          if (e.key === "Escape") setEditingWinIdx(null);
-                        }}
-                        autoFocus
-                        className="flex-1 rounded-lg border-0 h-7 text-sm"
+                          }}
+                          className="px-2 rounded-lg text-xs"
+                          style={{
+                            background: "oklch(0.5 0.16 150)",
+                            color: "white",
+                          }}
+                        >
+                          ✓
+                        </button>
+                      </div>
+                    ) : (
+                      <label
+                        htmlFor={`win-${i}`}
+                        className="flex-1 text-sm cursor-pointer"
                         style={{
-                          background: "oklch(0.9 0.03 55 / 0.5)",
-                          color: "oklch(0.3 0.1 55)",
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          saveWins(
-                            wins.map((w, idx) =>
-                              idx === i
-                                ? {
-                                    ...w,
-                                    label: editingWinLabel.trim() || w.label,
-                                  }
-                                : w,
-                            ),
-                          );
-                          setEditingWinIdx(null);
-                        }}
-                        className="px-2 rounded-lg text-xs"
-                        style={{
-                          background: "oklch(0.5 0.16 150)",
-                          color: "white",
+                          color: win.done
+                            ? "oklch(0.62 0.1 55)"
+                            : "oklch(0.35 0.1 55)",
+                          textDecoration: win.done ? "line-through" : "none",
                         }}
                       >
-                        ✓
-                      </button>
-                    </div>
-                  ) : (
-                    <label
-                      htmlFor={`win-${i}`}
-                      className="flex-1 text-sm cursor-pointer"
-                      style={{
-                        color: win.done
-                          ? "oklch(0.62 0.1 55)"
-                          : "oklch(0.35 0.1 55)",
-                        textDecoration: win.done ? "line-through" : "none",
+                        {win.label}
+                      </label>
+                    )}
+                    <button
+                      type="button"
+                      data-ocid={`wins.edit_button.${i + 1}`}
+                      onClick={() => {
+                        setEditingWinIdx(i);
+                        setEditingWinLabel(win.label);
                       }}
+                      className="p-1 rounded opacity-60 hover:opacity-100"
+                      style={{ color: "oklch(0.55 0.12 55)" }}
                     >
-                      {win.label}
-                    </label>
-                  )}
-                  <button
-                    type="button"
-                    data-ocid={`wins.edit_button.${i + 1}`}
-                    onClick={() => {
-                      setEditingWinIdx(i);
-                      setEditingWinLabel(win.label);
-                    }}
-                    className="p-1 rounded opacity-60 hover:opacity-100"
-                    style={{ color: "oklch(0.55 0.12 55)" }}
-                  >
-                    <Pencil className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* ──────────────── RIYALAH STREAK CARD ──────────────── */}
-        <div
-          data-ocid="riyalah_streak.card"
-          className="rounded-2xl p-5 mb-6"
-          style={{
-            background:
-              "linear-gradient(135deg, oklch(0.22 0.1 285 / 0.95), oklch(0.18 0.08 295 / 0.95))",
-            border: "1px solid oklch(0.4 0.1 285 / 0.3)",
-          }}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div
-                className="font-display text-lg font-bold mb-1"
-                style={{ color: "oklch(0.88 0.1 80)" }}
-              >
-                🔥 Riyalah Streak
-              </div>
-              <div className="flex gap-6">
-                <div>
-                  <div
-                    className="font-display text-3xl font-bold"
-                    style={{ color: "oklch(0.88 0.18 70)" }}
-                  >
-                    {riyalahStreak}
+        {!focusMode && (
+          <div
+            data-ocid="riyalah_streak.card"
+            className="rounded-2xl p-5 mb-6"
+            style={{
+              background:
+                "linear-gradient(135deg, oklch(0.22 0.1 285 / 0.95), oklch(0.18 0.08 295 / 0.95))",
+              border: "1px solid oklch(0.4 0.1 285 / 0.3)",
+            }}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <div
+                  className="font-display text-lg font-bold mb-1"
+                  style={{ color: "oklch(0.88 0.1 80)" }}
+                >
+                  🔥 Riyalah Streak
+                </div>
+                <div className="flex gap-6">
+                  <div>
+                    <div
+                      className="font-display text-3xl font-bold"
+                      style={{ color: "oklch(0.88 0.18 70)" }}
+                    >
+                      {riyalahStreak}
+                    </div>
+                    <div
+                      className="text-xs"
+                      style={{ color: "oklch(0.6 0.08 285)" }}
+                    >
+                      Current streak
+                    </div>
                   </div>
-                  <div
-                    className="text-xs"
-                    style={{ color: "oklch(0.6 0.08 285)" }}
-                  >
-                    Current streak
+                  <div>
+                    <div
+                      className="font-display text-3xl font-bold"
+                      style={{ color: "oklch(0.78 0.14 80)" }}
+                    >
+                      {riyalahLongest}
+                    </div>
+                    <div
+                      className="text-xs"
+                      style={{ color: "oklch(0.6 0.08 285)" }}
+                    >
+                      Longest streak
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <div
-                    className="font-display text-3xl font-bold"
-                    style={{ color: "oklch(0.78 0.14 80)" }}
-                  >
-                    {riyalahLongest}
-                  </div>
-                  <div
-                    className="text-xs"
-                    style={{ color: "oklch(0.6 0.08 285)" }}
-                  >
-                    Longest streak
-                  </div>
-                </div>
               </div>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                data-ocid="riyalah_streak.increment_button"
-                onClick={handleMarkStreakToday}
-                className="rounded-xl text-sm"
-                style={{
-                  background: "oklch(0.55 0.22 55 / 0.3)",
-                  color: "oklch(0.88 0.18 70)",
-                  border: "1px solid oklch(0.65 0.2 60 / 0.4)",
-                }}
-              >
-                🔥 Mark Today
-              </Button>
-              <Button
-                data-ocid="riyalah_streak.reset_button"
-                onClick={() => {
-                  setRiyalahStreak(0);
-                  localStorage.setItem("riyalah_streak", "0");
-                  toast.info("Streak reset.");
-                }}
-                variant="outline"
-                className="rounded-xl text-sm"
-                style={{
-                  border: "1px solid oklch(0.4 0.1 285 / 0.4)",
-                  color: "oklch(0.6 0.1 285)",
-                }}
-              >
-                Reset
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  data-ocid="riyalah_streak.increment_button"
+                  onClick={handleMarkStreakToday}
+                  className="rounded-xl text-sm"
+                  style={{
+                    background: "oklch(0.55 0.22 55 / 0.3)",
+                    color: "oklch(0.88 0.18 70)",
+                    border: "1px solid oklch(0.65 0.2 60 / 0.4)",
+                  }}
+                >
+                  🔥 Mark Today
+                </Button>
+                <Button
+                  data-ocid="riyalah_streak.reset_button"
+                  onClick={() => {
+                    setRiyalahStreak(0);
+                    localStorage.setItem("riyalah_streak", "0");
+                    toast.info("Streak reset.");
+                  }}
+                  variant="outline"
+                  className="rounded-xl text-sm"
+                  style={{
+                    border: "1px solid oklch(0.4 0.1 285 / 0.4)",
+                    color: "oklch(0.6 0.1 285)",
+                  }}
+                >
+                  Reset
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <Tabs defaultValue="spiritual" className="space-y-6">
           <TabsList
@@ -3327,6 +3453,52 @@ function AppContent() {
         </Tabs>
       </main>
 
+      {/* ──────────────── ACHIEVEMENT BADGES ──────────────── */}
+      {!focusMode && (
+        <AchievementBadges
+          riyalahStreak={riyalahStreak}
+          booksCompleted={checkedItems.mABooks.length}
+          certsCompleted={checkedItems.certificates.length}
+          studentsCount={students.length}
+        />
+      )}
+
+      {/* ──────────────── MONTHLY WINS + MONTHLY REPORT ──────────────── */}
+      {!focusMode && (
+        <div className="grid gap-4 md:grid-cols-2 mb-6">
+          <MonthlyWins
+            booksCompleted={checkedItems.mABooks.length}
+            riyalahStreak={riyalahStreak}
+            incomeTotal={monthlyIncome}
+            certsCompleted={checkedItems.certificates.length}
+          />
+          <MonthlyReport
+            weeklyHoursTotal={totalWeeklyHours}
+            booksCompleted={checkedItems.mABooks.length}
+            certsCompleted={checkedItems.certificates.length}
+            incomeTotal={monthlyIncome}
+            riyalahPct={riyalahPct}
+          />
+        </div>
+      )}
+
+      {/* ──────────────── PERSONAL READING TRACKER ──────────────── */}
+      {!focusMode && <PersonalReadingTracker />}
+
+      {/* ──────────────── EMERGENCY RESET BUTTON ──────────────── */}
+      {!focusMode && <EmergencyResetButton />}
+
+      {/* ──────────────── VISION SECTION ──────────────── */}
+      {!focusMode && <VisionSection />}
+
+      {/* ──────────────── FUTURE AYSHA MESSAGE ──────────────── */}
+      {!focusMode && <FutureAyshaMessage />}
+
+      {/* ──────────────── LIFE TIMELINE ──────────────── */}
+      {!focusMode && <LifeTimeline />}
+
+      {/* ──────────────── ACHIEVEMENT TIMELINE ──────────────── */}
+      {!focusMode && <AchievementTimeline />}
       {/* Footer */}
       <footer className="mt-12 pb-8 text-center">
         <p className="text-sm" style={{ color: "oklch(0.6 0.02 75)" }}>
