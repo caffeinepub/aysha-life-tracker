@@ -390,6 +390,10 @@ export interface StudentData {
   active: boolean;
   classFrequency: string;
   nextClass: string;
+  feeType?: "monthly" | "per_session";
+  fee?: number;
+  feePerSession?: number;
+  sessionsPerMonth?: number;
 }
 
 function StudentForm({
@@ -409,6 +413,16 @@ function StudentForm({
   );
   const [nextClass, setNextClass] = useState(initial?.nextClass ?? "");
   const [active, setActive] = useState(initial?.active ?? true);
+  const [feeType, setFeeType] = useState<"monthly" | "per_session">(
+    initial?.feeType ?? "monthly",
+  );
+  const [fee, setFee] = useState(initial?.fee?.toString() ?? "");
+  const [feePerSession, setFeePerSession] = useState(
+    initial?.feePerSession?.toString() ?? "",
+  );
+  const [sessionsPerMonth, setSessionsPerMonth] = useState(
+    initial?.sessionsPerMonth?.toString() ?? "",
+  );
 
   return (
     <div className="space-y-3">
@@ -502,6 +516,111 @@ function StudentForm({
           style={{ background: "oklch(0.94 0.02 75 / 0.6)" }}
         />
       </div>
+      {/* Fee type toggle */}
+      <div>
+        <p
+          className="text-xs font-semibold block mb-1"
+          style={{ color: "oklch(0.38 0.08 75)" }}
+        >
+          Fee Type
+        </p>
+        <div className="flex gap-2">
+          {(["monthly", "per_session"] as const).map((type) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => setFeeType(type)}
+              className="flex-1 py-1.5 rounded-xl text-xs font-semibold transition-all"
+              style={{
+                background:
+                  feeType === type
+                    ? "oklch(0.5 0.18 55)"
+                    : "oklch(0.94 0.02 75 / 0.6)",
+                color: feeType === type ? "white" : "oklch(0.45 0.08 75)",
+              }}
+            >
+              {type === "monthly" ? "Monthly Flat" : "Per Session"}
+            </button>
+          ))}
+        </div>
+      </div>
+      {feeType === "monthly" && (
+        <div>
+          <label
+            className="text-xs font-semibold block mb-1"
+            htmlFor="sf-fee"
+            style={{ color: "oklch(0.38 0.08 75)" }}
+          >
+            Monthly Fee (₹)
+          </label>
+          <Input
+            id="sf-fee"
+            data-ocid="student_form.fee_input"
+            type="number"
+            value={fee}
+            onChange={(e) => setFee(e.target.value)}
+            placeholder="e.g. 1500"
+            className="rounded-xl border-0"
+            style={{ background: "oklch(0.94 0.02 75 / 0.6)" }}
+          />
+        </div>
+      )}
+      {feeType === "per_session" && (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label
+              className="text-xs font-semibold block mb-1"
+              htmlFor="sf-fee-session"
+              style={{ color: "oklch(0.38 0.08 75)" }}
+            >
+              Fee/Session (₹)
+            </label>
+            <Input
+              id="sf-fee-session"
+              data-ocid="student_form.fee_per_session_input"
+              type="number"
+              value={feePerSession}
+              onChange={(e) => setFeePerSession(e.target.value)}
+              placeholder="e.g. 130"
+              className="rounded-xl border-0"
+              style={{ background: "oklch(0.94 0.02 75 / 0.6)" }}
+            />
+          </div>
+          <div>
+            <label
+              className="text-xs font-semibold block mb-1"
+              htmlFor="sf-sessions-mo"
+              style={{ color: "oklch(0.38 0.08 75)" }}
+            >
+              Sessions/Month
+            </label>
+            <Input
+              id="sf-sessions-mo"
+              data-ocid="student_form.sessions_per_month_input"
+              type="number"
+              value={sessionsPerMonth}
+              onChange={(e) => setSessionsPerMonth(e.target.value)}
+              placeholder="e.g. 8"
+              className="rounded-xl border-0"
+              style={{ background: "oklch(0.94 0.02 75 / 0.6)" }}
+            />
+          </div>
+          {feePerSession && sessionsPerMonth && (
+            <div
+              className="col-span-2 text-center py-1.5 rounded-xl text-xs font-semibold"
+              style={{
+                background: "oklch(0.92 0.05 55 / 0.5)",
+                color: "oklch(0.42 0.14 50)",
+              }}
+            >
+              Est. monthly: ₹
+              {(
+                Number(feePerSession) * Number(sessionsPerMonth)
+              ).toLocaleString("en-IN")}
+            </div>
+          )}
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <Checkbox
           data-ocid="student_form.active_checkbox"
@@ -529,6 +648,12 @@ function StudentForm({
               classFrequency,
               nextClass,
               active,
+              feeType,
+              fee: fee ? Number(fee) : undefined,
+              feePerSession: feePerSession ? Number(feePerSession) : undefined,
+              sessionsPerMonth: sessionsPerMonth
+                ? Number(sessionsPerMonth)
+                : undefined,
             });
           }}
           className="flex-1 rounded-xl"
@@ -737,6 +862,25 @@ export function DynamicStudentsSection({
                       {student.notes}
                     </p>
                   )}
+                  {student.feeType === "per_session" &&
+                  student.feePerSession ? (
+                    <p
+                      className="text-xs mt-1 font-semibold"
+                      style={{ color: "oklch(0.45 0.16 50)" }}
+                    >
+                      💰 ₹{student.feePerSession}/session
+                      {student.sessionsPerMonth
+                        ? ` · Est. ₹${(student.feePerSession * student.sessionsPerMonth).toLocaleString("en-IN")}/mo`
+                        : ""}
+                    </p>
+                  ) : student.fee ? (
+                    <p
+                      className="text-xs mt-1 font-semibold"
+                      style={{ color: "oklch(0.45 0.16 50)" }}
+                    >
+                      💰 ₹{student.fee.toLocaleString("en-IN")}/month
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex flex-col gap-1.5 items-end flex-shrink-0">
                   <div className="flex items-center gap-1">

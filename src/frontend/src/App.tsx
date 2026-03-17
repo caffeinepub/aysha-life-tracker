@@ -85,6 +85,8 @@ const INIT_RIYALAH = [
   "Qur'an",
   "Istighfar",
   "Swalath",
+  "Haddad",
+  "Tahleel",
   "Kitab Reading",
 ];
 
@@ -328,6 +330,860 @@ function PomodoroRing({
   );
 }
 
+function CycleScreen() {
+  const [periodLogs, setPeriodLogs] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("period_logs") ?? "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [cycleLength] = useState(28);
+  const [periodDuration] = useState(5);
+  const [periodChecklist, setPeriodChecklist] = useState<
+    Record<string, boolean>
+  >(() => {
+    try {
+      return JSON.parse(localStorage.getItem("period_checklist") ?? "{}");
+    } catch {
+      return {};
+    }
+  });
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+
+  const PERIOD_ITEMS = [
+    "Mowlid",
+    "Maala Paat",
+    "Badriyathul Manqoosiya",
+    "Haddad",
+    "Swalath",
+    "Tahleel",
+    "Istighfar",
+    "Adhkar",
+  ];
+
+  const [periodEvents, setPeriodEvents] = useState<
+    { date: string; type: "start" | "end"; flow?: string }[]
+  >(() => {
+    try {
+      return JSON.parse(localStorage.getItem("period_events") ?? "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [selectedFlow, setSelectedFlow] = useState<string>("Medium");
+  const [showFlowPicker, setShowFlowPicker] = useState(false);
+  const [clickedDate, setClickedDate] = useState<string | null>(null);
+  const [calendarFlowPick, setCalendarFlowPick] = useState<string>("Medium");
+
+  const savePeriodLogs = (logs: string[]) => {
+    setPeriodLogs(logs);
+    localStorage.setItem("period_logs", JSON.stringify(logs));
+  };
+  const savePeriodEvents = (
+    events: { date: string; type: "start" | "end"; flow?: string }[],
+  ) => {
+    setPeriodEvents(events);
+    localStorage.setItem("period_events", JSON.stringify(events));
+  };
+  const togglePeriodItem = (item: string) => {
+    const updated = { ...periodChecklist, [item]: !periodChecklist[item] };
+    setPeriodChecklist(updated);
+    localStorage.setItem("period_checklist", JSON.stringify(updated));
+  };
+  const _logPeriodToday = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (!periodLogs.includes(today)) {
+      savePeriodLogs([...periodLogs, today].sort());
+      toast.success("Period start logged!");
+    }
+  };
+  const markPeriodStart = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (!periodLogs.includes(today)) {
+      savePeriodLogs([...periodLogs, today].sort());
+    }
+    const newEvent = {
+      date: today,
+      type: "start" as const,
+      flow: selectedFlow,
+    };
+    const filtered = periodEvents.filter(
+      (e) => !(e.date === today && e.type === "start"),
+    );
+    savePeriodEvents(
+      [...filtered, newEvent].sort((a, b) => a.date.localeCompare(b.date)),
+    );
+    setShowFlowPicker(false);
+    toast.success(`Period started — flow: ${selectedFlow}`);
+  };
+  const markPeriodEnd = () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const newEvent = { date: today, type: "end" as const };
+    const filtered = periodEvents.filter(
+      (e) => !(e.date === today && e.type === "end"),
+    );
+    savePeriodEvents(
+      [...filtered, newEvent].sort((a, b) => a.date.localeCompare(b.date)),
+    );
+    toast.success("Period end marked!");
+  };
+  const lastStartEvent = [...periodEvents]
+    .filter((e) => e.type === "start")
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  const lastEndEvent = [...periodEvents]
+    .filter((e) => e.type === "end")
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  const periodActive =
+    lastStartEvent &&
+    (!lastEndEvent || lastEndEvent.date < lastStartEvent.date);
+
+  const lastPeriodDate =
+    periodLogs.length > 0 ? new Date(periodLogs[periodLogs.length - 1]) : null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const cycleDay = lastPeriodDate
+    ? Math.floor((today.getTime() - lastPeriodDate.getTime()) / 86400000) + 1
+    : null;
+  const phase =
+    cycleDay === null
+      ? "Unknown"
+      : cycleDay <= periodDuration
+        ? "Period"
+        : cycleDay <= 13
+          ? "Follicular"
+          : cycleDay <= 16
+            ? "Ovulation"
+            : "Luteal";
+  const nextPeriodDate = lastPeriodDate
+    ? new Date(lastPeriodDate.getTime() + cycleLength * 86400000)
+    : null;
+  const cycleProgress = cycleDay
+    ? Math.min(100, Math.round((cycleDay / cycleLength) * 100))
+    : 0;
+
+  let avgCycle = cycleLength;
+  if (periodLogs.length >= 2) {
+    const diffs: number[] = [];
+    for (let i = 1; i < periodLogs.length; i++) {
+      diffs.push(
+        Math.round(
+          (new Date(periodLogs[i]).getTime() -
+            new Date(periodLogs[i - 1]).getTime()) /
+            86400000,
+        ),
+      );
+    }
+    avgCycle = Math.round(diffs.reduce((a, b) => a + b, 0) / diffs.length);
+  }
+  const isRegular =
+    periodLogs.length >= 3 &&
+    (() => {
+      const diffs: number[] = [];
+      for (let i = 1; i < periodLogs.length; i++)
+        diffs.push(
+          Math.round(
+            (new Date(periodLogs[i]).getTime() -
+              new Date(periodLogs[i - 1]).getTime()) /
+              86400000,
+          ),
+        );
+      const avg = diffs.reduce((a, b) => a + b, 0) / diffs.length;
+      return diffs.every((d) => Math.abs(d - avg) <= 3);
+    })();
+
+  const insights = {
+    Period: {
+      energy: "Low — rest and take it easy",
+      study: "Light review only, avoid heavy topics",
+    },
+    Follicular: {
+      energy: "Rising — good for learning new things",
+      study: "Perfect for tackling new subjects",
+    },
+    Ovulation: {
+      energy: "Peak — best focus and clarity",
+      study: "Best days for exams, hard topics, deep work",
+    },
+    Luteal: {
+      energy: "Moderate, then declining",
+      study: "Review and consolidate what you've learned",
+    },
+    Unknown: {
+      energy: "Log your period to get insights",
+      study: "Log your period to get insights",
+    },
+  };
+  const insight = insights[phase as keyof typeof insights] ?? insights.Unknown;
+
+  const getDaysInMonth = (year: number, month: number) =>
+    new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year: number, month: number) =>
+    new Date(year, month, 1).getDay();
+  const isPeriodDay = (dateStr: string) => {
+    return periodLogs.some((logDate) => {
+      const start = new Date(logDate);
+      const d = new Date(dateStr);
+      const diff = Math.floor((d.getTime() - start.getTime()) / 86400000);
+      return diff >= 0 && diff < periodDuration;
+    });
+  };
+  const isOvulationDay = (dateStr: string) => {
+    if (!lastPeriodDate) return false;
+    const d = new Date(dateStr);
+    const dayInCycle =
+      Math.floor((d.getTime() - lastPeriodDate.getTime()) / 86400000) + 1;
+    return dayInCycle >= 12 && dayInCycle <= 16;
+  };
+  const isTodayDate = (dateStr: string) =>
+    dateStr === new Date().toISOString().slice(0, 10);
+
+  const { year: calYear, month: calMo } = calendarMonth;
+  const daysInMonth = getDaysInMonth(calYear, calMo);
+  const firstDay = getFirstDayOfMonth(calYear, calMo);
+  const monthName = new Date(calYear, calMo).toLocaleString("default", {
+    month: "long",
+    year: "numeric",
+  });
+  const phaseColor =
+    phase === "Period"
+      ? "oklch(0.62 0.2 15)"
+      : phase === "Ovulation"
+        ? "oklch(0.62 0.18 50)"
+        : phase === "Follicular"
+          ? "oklch(0.55 0.18 145)"
+          : "oklch(0.52 0.14 285)";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4 }}
+      className="space-y-5"
+    >
+      <div className="text-center">
+        <h2
+          className="font-display text-xl font-bold"
+          style={{ color: "oklch(0.38 0.12 285)" }}
+        >
+          🌸 Cycle Tracker
+        </h2>
+        <p className="text-sm mt-0.5" style={{ color: "oklch(0.55 0.08 285)" }}>
+          Private &amp; personal
+        </p>
+      </div>
+
+      <Card className="rounded-2xl border-0">
+        <CardContent className="pt-5 flex flex-col items-center gap-4">
+          <div className="relative" style={{ width: 160, height: 160 }}>
+            <svg
+              width={160}
+              height={160}
+              role="img"
+              aria-label="Cycle progress ring"
+            >
+              <circle
+                cx={80}
+                cy={80}
+                r={64}
+                fill="none"
+                stroke="oklch(0.9 0.04 285 / 0.4)"
+                strokeWidth={12}
+              />
+              <circle
+                cx={80}
+                cy={80}
+                r={64}
+                fill="none"
+                stroke={phaseColor}
+                strokeWidth={12}
+                strokeDasharray={`${2 * Math.PI * 64}`}
+                strokeDashoffset={`${2 * Math.PI * 64 * (1 - cycleProgress / 100)}`}
+                strokeLinecap="round"
+                transform="rotate(-90 80 80)"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span
+                className="font-display text-3xl font-bold"
+                style={{ color: phaseColor }}
+              >
+                {cycleDay !== null ? `Day ${cycleDay}` : "—"}
+              </span>
+              <span
+                className="text-xs font-semibold mt-0.5"
+                style={{ color: "oklch(0.55 0.1 285)" }}
+              >
+                {phase}
+              </span>
+            </div>
+          </div>
+          {/* Period status */}
+          {lastStartEvent && (
+            <div
+              className="text-xs text-center px-3 py-2 rounded-xl w-full"
+              style={{
+                background: periodActive
+                  ? "oklch(0.95 0.04 15 / 0.5)"
+                  : "oklch(0.95 0.02 75 / 0.5)",
+                color: periodActive
+                  ? "oklch(0.45 0.15 15)"
+                  : "oklch(0.5 0.06 75)",
+              }}
+            >
+              {periodActive ? (
+                <>
+                  🩸 <strong>Period active</strong> — started{" "}
+                  {new Date(lastStartEvent.date).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                  })}
+                  {lastStartEvent.flow && (
+                    <>
+                      , flow: <strong>{lastStartEvent.flow}</strong>
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  ✅ Period ended{" "}
+                  {lastEndEvent &&
+                    new Date(lastEndEvent.date).toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                    })}
+                </>
+              )}
+            </div>
+          )}
+          {/* Flow picker */}
+          {showFlowPicker && (
+            <div
+              className="w-full p-3 rounded-xl space-y-2"
+              style={{ background: "oklch(0.96 0.03 15 / 0.4)" }}
+            >
+              <p
+                className="text-xs font-semibold text-center"
+                style={{ color: "oklch(0.45 0.15 15)" }}
+              >
+                Select flow level
+              </p>
+              <div className="flex gap-2 justify-center flex-wrap">
+                {["Spotting", "Light", "Medium", "Heavy"].map((flow) => (
+                  <button
+                    key={flow}
+                    type="button"
+                    onClick={() => setSelectedFlow(flow)}
+                    className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+                    style={{
+                      background:
+                        selectedFlow === flow
+                          ? "oklch(0.62 0.2 15)"
+                          : "oklch(0.9 0.04 15 / 0.5)",
+                      color:
+                        selectedFlow === flow ? "white" : "oklch(0.48 0.14 15)",
+                    }}
+                  >
+                    {flow}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={markPeriodStart}
+                  className="flex-1 rounded-xl text-sm font-semibold"
+                  style={{ background: "oklch(0.62 0.2 15)", color: "white" }}
+                >
+                  Confirm Start
+                </Button>
+                <Button
+                  onClick={() => setShowFlowPicker(false)}
+                  variant="outline"
+                  className="rounded-xl text-sm"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+          {!showFlowPicker && (
+            <div className="flex gap-2 w-full">
+              <Button
+                onClick={() => setShowFlowPicker(true)}
+                className="flex-1 rounded-xl text-sm font-semibold"
+                style={{ background: "oklch(0.62 0.2 15)", color: "white" }}
+              >
+                🩸 Mark Period Start
+              </Button>
+              <Button
+                onClick={markPeriodEnd}
+                variant="outline"
+                className="flex-1 rounded-xl text-sm font-semibold"
+                style={{
+                  borderColor: "oklch(0.65 0.1 285 / 0.4)",
+                  color: "oklch(0.42 0.1 285)",
+                }}
+              >
+                ✅ Mark Period End
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-0">
+        <CardHeader className="pb-2">
+          <CardTitle
+            className="text-base font-display"
+            style={{ color: "oklch(0.38 0.12 285)" }}
+          >
+            📊 Analysis
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { label: "Cycle Length", value: `${avgCycle} days` },
+              {
+                label: "Pattern",
+                value:
+                  periodLogs.length >= 3
+                    ? isRegular
+                      ? "Regular ✓"
+                      : "Irregular"
+                    : "Need more data",
+              },
+              {
+                label: "Last Period",
+                value: lastPeriodDate
+                  ? lastPeriodDate.toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                    })
+                  : "Not logged",
+              },
+              {
+                label: "Next Period",
+                value: nextPeriodDate
+                  ? nextPeriodDate.toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                    })
+                  : "Not logged",
+              },
+            ].map(({ label, value }) => (
+              <div
+                key={label}
+                className="p-2 rounded-xl text-center"
+                style={{ background: "oklch(0.95 0.02 285 / 0.5)" }}
+              >
+                <p
+                  className="text-xs"
+                  style={{ color: "oklch(0.55 0.08 285)" }}
+                >
+                  {label}
+                </p>
+                <p
+                  className="font-semibold mt-0.5"
+                  style={{ color: "oklch(0.35 0.1 285)" }}
+                >
+                  {value}
+                </p>
+              </div>
+            ))}
+          </div>
+          {periodLogs.length > 0 && (
+            <div>
+              <p
+                className="text-xs font-semibold mb-1"
+                style={{ color: "oklch(0.5 0.08 285)" }}
+              >
+                Logged dates:
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {periodLogs.slice(-5).map((d) => (
+                  <span
+                    key={d}
+                    className="text-xs px-2 py-0.5 rounded-full"
+                    style={{
+                      background: "oklch(0.9 0.04 15 / 0.5)",
+                      color: "oklch(0.45 0.15 15)",
+                    }}
+                  >
+                    {new Date(d).toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                    })}
+                    <button
+                      type="button"
+                      className="ml-1 opacity-60"
+                      onClick={() =>
+                        savePeriodLogs(periodLogs.filter((x) => x !== d))
+                      }
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-0">
+        <CardHeader className="pb-2">
+          <CardTitle
+            className="text-base font-display"
+            style={{ color: "oklch(0.38 0.12 285)" }}
+          >
+            💡 Smart Insights
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <div
+            className="p-3 rounded-xl"
+            style={{ background: "oklch(0.96 0.03 55 / 0.5)" }}
+          >
+            <p
+              className="text-xs font-semibold mb-0.5"
+              style={{ color: "oklch(0.55 0.1 55)" }}
+            >
+              ⚡ Energy Level
+            </p>
+            <p style={{ color: "oklch(0.38 0.12 55)" }}>{insight.energy}</p>
+          </div>
+          <div
+            className="p-3 rounded-xl"
+            style={{ background: "oklch(0.96 0.03 145 / 0.5)" }}
+          >
+            <p
+              className="text-xs font-semibold mb-0.5"
+              style={{ color: "oklch(0.45 0.15 145)" }}
+            >
+              📚 Best Study Days
+            </p>
+            <p style={{ color: "oklch(0.35 0.12 145)" }}>{insight.study}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-0">
+        <CardHeader className="pb-2">
+          <CardTitle
+            className="text-base font-display"
+            style={{ color: "oklch(0.38 0.12 285)" }}
+          >
+            {phase === "Period"
+              ? "🤲 Period Spiritual Checklist"
+              : "🌙 Riyalah Routine"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {phase === "Period" ? (
+            <div className="space-y-2">
+              {PERIOD_ITEMS.map((item) => (
+                <label
+                  key={item}
+                  htmlFor={`period-item-${item}`}
+                  className="flex items-center gap-3 p-2 rounded-xl cursor-pointer"
+                  style={{ background: "oklch(0.96 0.02 285 / 0.4)" }}
+                >
+                  <Checkbox
+                    id={`period-item-${item}`}
+                    checked={!!periodChecklist[item]}
+                    onCheckedChange={() => togglePeriodItem(item)}
+                  />
+                  <span
+                    className="text-sm font-medium"
+                    style={{ color: "oklch(0.35 0.1 285)" }}
+                  >
+                    {item}
+                  </span>
+                </label>
+              ))}
+              <p
+                className="text-xs text-center mt-2"
+                style={{ color: "oklch(0.6 0.08 285)" }}
+              >
+                {Object.values(periodChecklist).filter(Boolean).length}/
+                {PERIOD_ITEMS.length} completed
+              </p>
+            </div>
+          ) : (
+            <div
+              className="space-y-1 text-sm"
+              style={{ color: "oklch(0.45 0.1 285)" }}
+            >
+              <p className="font-semibold mb-2">Your regular Riyalah:</p>
+              {[
+                "Tahajjud",
+                "Fajr Adhkar",
+                "Qur'an",
+                "Istighfar",
+                "Swalath",
+                "Haddad",
+                "Tahleel",
+                "Kitab Reading",
+              ].map((r) => (
+                <p
+                  key={r}
+                  className="py-1 px-2 rounded-lg"
+                  style={{ background: "oklch(0.95 0.02 285 / 0.4)" }}
+                >
+                  • {r}
+                </p>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-0">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle
+              className="text-base font-display"
+              style={{ color: "oklch(0.38 0.12 285)" }}
+            >
+              📅 Calendar
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setCalendarMonth((prev) => {
+                    const d = new Date(prev.year, prev.month - 1);
+                    return { year: d.getFullYear(), month: d.getMonth() };
+                  })
+                }
+                className="text-xs px-2 py-1 rounded-lg"
+                style={{
+                  background: "oklch(0.92 0.03 285)",
+                  color: "oklch(0.45 0.1 285)",
+                }}
+              >
+                ‹
+              </button>
+              <span
+                className="text-xs font-semibold"
+                style={{ color: "oklch(0.45 0.1 285)" }}
+              >
+                {monthName}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setCalendarMonth((prev) => {
+                    const d = new Date(prev.year, prev.month + 1);
+                    return { year: d.getFullYear(), month: d.getMonth() };
+                  })
+                }
+                className="text-xs px-2 py-1 rounded-lg"
+                style={{
+                  background: "oklch(0.92 0.03 285)",
+                  color: "oklch(0.45 0.1 285)",
+                }}
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+              <div
+                key={d}
+                className="text-center text-xs font-semibold"
+                style={{ color: "oklch(0.55 0.08 285)" }}
+              >
+                {d}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {Array.from({ length: firstDay }, (_, i) => {
+              const slotKey = `empty-${calYear}-${calMo}-${String(i).padStart(2, "0")}`;
+              return <div key={slotKey} />;
+            })}
+            {Array.from({ length: daysInMonth }).map((_, i) => {
+              const day = i + 1;
+              const dateStr = `${calYear}-${String(calMo + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+              const isPeriod = isPeriodDay(dateStr);
+              const isOvul = isOvulationDay(dateStr);
+              const isToday = isTodayDate(dateStr);
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => {
+                    if (isPeriod) {
+                      // Remove period log for this date
+                      const newLogs = periodLogs.filter((d) => {
+                        const logDate = new Date(d);
+                        const clickDate = new Date(dateStr);
+                        const diff = Math.abs(
+                          (clickDate.getTime() - logDate.getTime()) / 86400000,
+                        );
+                        return diff > periodDuration;
+                      });
+                      savePeriodLogs(newLogs.sort());
+                      const newEvents = periodEvents.filter((e) => {
+                        const diff = Math.abs(
+                          (new Date(dateStr).getTime() -
+                            new Date(e.date).getTime()) /
+                            86400000,
+                        );
+                        return diff > periodDuration;
+                      });
+                      savePeriodEvents(newEvents);
+                      toast.success("Period entry removed");
+                    } else {
+                      setClickedDate(dateStr);
+                      setCalendarFlowPick("Medium");
+                    }
+                  }}
+                  className="aspect-square flex flex-col items-center justify-center rounded-lg text-xs font-medium transition-all hover:opacity-80 active:scale-95 relative"
+                  style={{
+                    background: isPeriod
+                      ? "oklch(0.85 0.12 15 / 0.7)"
+                      : isOvul
+                        ? "oklch(0.88 0.1 50 / 0.6)"
+                        : "oklch(0.95 0.02 285 / 0.3)",
+                    color: isPeriod
+                      ? "oklch(0.42 0.18 15)"
+                      : isOvul
+                        ? "oklch(0.42 0.16 50)"
+                        : "oklch(0.45 0.1 285)",
+                    border: isToday ? "2px solid oklch(0.55 0.15 285)" : "none",
+                    fontWeight: isToday ? "700" : "500",
+                  }}
+                >
+                  {day}
+                  {isPeriod && (
+                    <span
+                      className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full"
+                      style={{ background: "oklch(0.55 0.2 15)" }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {clickedDate && (
+            <div
+              className="mt-3 p-3 rounded-xl"
+              style={{ background: "oklch(0.97 0.02 15)" }}
+            >
+              <div
+                className="text-xs font-semibold mb-2"
+                style={{ color: "oklch(0.42 0.18 15)" }}
+              >
+                Mark period for {clickedDate}
+              </div>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {["Spotting", "Light", "Medium", "Heavy"].map((flow) => (
+                  <button
+                    key={flow}
+                    type="button"
+                    onClick={() => setCalendarFlowPick(flow)}
+                    className="text-xs px-2.5 py-1 rounded-full transition-all"
+                    style={{
+                      background:
+                        calendarFlowPick === flow
+                          ? "oklch(0.7 0.15 15)"
+                          : "oklch(0.9 0.05 15)",
+                      color:
+                        calendarFlowPick === flow
+                          ? "white"
+                          : "oklch(0.45 0.1 15)",
+                      fontWeight: calendarFlowPick === flow ? "600" : "400",
+                    }}
+                  >
+                    {flow}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!periodLogs.includes(clickedDate)) {
+                      savePeriodLogs([...periodLogs, clickedDate].sort());
+                    }
+                    const newEvent = {
+                      date: clickedDate,
+                      type: "start" as const,
+                      flow: calendarFlowPick,
+                    };
+                    const filtered = periodEvents.filter(
+                      (e) => !(e.date === clickedDate && e.type === "start"),
+                    );
+                    savePeriodEvents(
+                      [...filtered, newEvent].sort((a, b) =>
+                        a.date.localeCompare(b.date),
+                      ),
+                    );
+                    setClickedDate(null);
+                    toast.success(
+                      `Period logged for ${clickedDate} — ${calendarFlowPick} flow`,
+                    );
+                  }}
+                  className="flex-1 text-xs py-1.5 rounded-lg font-semibold"
+                  style={{ background: "oklch(0.7 0.15 15)", color: "white" }}
+                >
+                  ✓ Log Period
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setClickedDate(null)}
+                  className="text-xs px-3 py-1.5 rounded-lg"
+                  style={{
+                    background: "oklch(0.9 0.03 285)",
+                    color: "oklch(0.45 0.1 285)",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="flex gap-3 mt-3 justify-center">
+            <div className="flex items-center gap-1.5">
+              <div
+                className="w-3 h-3 rounded-sm"
+                style={{ background: "oklch(0.85 0.12 15 / 0.7)" }}
+              />
+              <span
+                className="text-xs"
+                style={{ color: "oklch(0.5 0.08 285)" }}
+              >
+                Period
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div
+                className="w-3 h-3 rounded-sm"
+                style={{ background: "oklch(0.88 0.1 50 / 0.6)" }}
+              />
+              <span
+                className="text-xs"
+                style={{ color: "oklch(0.5 0.08 285)" }}
+              >
+                Ovulation
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
 function AppContent() {
   const { actor, isFetching } = useActor();
 
@@ -352,7 +1208,33 @@ function AppContent() {
   const [monthlyIncome, setMonthlyIncome] = useState(0);
   const [incomeEntries, setIncomeEntries] = useState<
     { label: string; amount: number }[]
-  >([]);
+  >(() => {
+    try {
+      const saved = localStorage.getItem("income_entries");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [incomeHistory, setIncomeHistory] = useState<
+    {
+      month: string;
+      year: number;
+      total: number;
+      entries: { label: string; amount: number }[];
+    }[]
+  >(() => {
+    try {
+      const saved = localStorage.getItem("income_history");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [incomeEntryLabel, setIncomeEntryLabel] = useState("");
   const [incomeEntryAmount, setIncomeEntryAmount] = useState("");
   const [dailyTasks, setDailyTasks] = useState<Task[]>([]);
@@ -671,6 +1553,72 @@ function AppContent() {
     });
   };
 
+  // Persist income entries to localStorage
+  useEffect(() => {
+    localStorage.setItem("income_entries", JSON.stringify(incomeEntries));
+  }, [incomeEntries]);
+
+  // Auto-reset on mount if month changed
+  useEffect(() => {
+    const now = new Date();
+    const currentKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const storedKey =
+      localStorage.getItem("income_current_month") ?? currentKey;
+    if (storedKey !== currentKey) {
+      const storedEntries: { label: string; amount: number }[] = (() => {
+        try {
+          return JSON.parse(localStorage.getItem("income_entries") ?? "[]");
+        } catch {
+          return [];
+        }
+      })();
+      const total = storedEntries.reduce((s, e) => s + e.amount, 0);
+      const [yr, mo] = storedKey.split("-").map(Number);
+      const monthName = new Date(yr, mo - 1).toLocaleString("default", {
+        month: "long",
+      });
+      setIncomeHistory((prev) => {
+        const updated = [
+          ...prev.filter(
+            (h) =>
+              `${h.year}-${String(h.month).padStart(2, "0")}` !== storedKey,
+          ),
+          { month: monthName, year: yr, total, entries: storedEntries },
+        ];
+        localStorage.setItem("income_history", JSON.stringify(updated));
+        return updated;
+      });
+      setIncomeEntries([]);
+      localStorage.setItem("income_entries", "[]");
+      localStorage.setItem("income_current_month", currentKey);
+    } else {
+      localStorage.setItem("income_current_month", currentKey);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleResetMonth = () => {
+    if (!confirm("Save this month's income and start fresh?")) return;
+    const now = new Date();
+    const monthName = now.toLocaleString("default", { month: "long" });
+    const yr = now.getFullYear();
+    const total = incomeEntries.reduce((s, e) => s + e.amount, 0);
+    setIncomeHistory((prev) => {
+      const updated = [
+        ...prev.filter((h) => !(h.year === yr && h.month === monthName)),
+        { month: monthName, year: yr, total, entries: [...incomeEntries] },
+      ];
+      localStorage.setItem("income_history", JSON.stringify(updated));
+      return updated;
+    });
+    setIncomeEntries([]);
+    setMonthlyIncome(0);
+    localStorage.setItem("income_entries", "[]");
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1);
+    const nextKey = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}`;
+    localStorage.setItem("income_current_month", nextKey);
+    toast.success("Month saved! Starting fresh.");
+  };
+
   // Save daily goals to localStorage
   const saveDailyGoals = (
     goals: { id: string; text: string; done: boolean }[],
@@ -785,7 +1733,7 @@ function AppContent() {
       return next;
     });
     setAddMinutesInput("");
-    toast.success(`+${mins} minutes added to today's study hours`);
+    toast.success(`+$minsminutes added to today's study hours`);
   };
 
   const saveFocusItems = (items: typeof focusItems) => {
@@ -828,796 +1776,845 @@ function AppContent() {
   });
 
   return (
-    <div className={`min-h-screen${darkMode ? " dark" : ""}`}>
-      {/* Header */}
-      <header className="relative overflow-hidden">
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "linear-gradient(135deg, oklch(0.22 0.1 285) 0%, oklch(0.3 0.12 260) 40%, oklch(0.42 0.1 220) 70%, oklch(0.52 0.1 50) 100%)",
-          }}
-        />
-        {/* Star dots */}
-        <div className="absolute inset-0 star-field" />
-        {/* Subtle noise overlay */}
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage:
-              "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
-          }}
-        />
-        <div className="relative container mx-auto px-4 py-10 md:py-14 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: "easeOut" }}
-          >
-            <div className="flex items-center justify-center gap-3 mb-3">
-              <Sparkles
-                className="w-6 h-6"
-                style={{ color: "oklch(0.85 0.14 80)" }}
-              />
-              <span
-                className="font-display text-sm font-semibold tracking-widest uppercase"
-                style={{ color: "oklch(0.75 0.12 80)" }}
-              >
-                Personal Life Tracker
-              </span>
-              <Sparkles
-                className="w-6 h-6"
-                style={{ color: "oklch(0.85 0.14 80)" }}
-              />
-            </div>
-            {/* Dynamic time greeting */}
-            <p
-              className="text-base font-semibold mb-2"
-              style={{ color: "oklch(0.88 0.12 80)" }}
+    <div className="min-h-screen bg-gray-50">
+      <div
+        className={`w-full relative flex flex-col min-h-screen${darkMode ? " dark" : ""}`}
+      >
+        {/* Header */}
+        <header className="relative overflow-hidden">
+          <div
+            className="absolute inset-0"
+            style={{
+              background:
+                "linear-gradient(135deg, oklch(0.22 0.1 285) 0%, oklch(0.3 0.12 260) 40%, oklch(0.42 0.1 220) 70%, oklch(0.52 0.1 50) 100%)",
+            }}
+          />
+          {/* Star dots */}
+          <div className="absolute inset-0 star-field" />
+          {/* Subtle noise overlay */}
+          <div
+            className="absolute inset-0 opacity-[0.03]"
+            style={{
+              backgroundImage:
+                "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+            }}
+          />
+          <div className="relative container mx-auto px-4 py-10 md:py-14 text-center">
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, ease: "easeOut" }}
             >
-              {(() => {
-                const hr = new Date().getHours();
-                const firstFocus = focusItems[0]?.detail || "your top priority";
-                if (hr >= 6 && hr < 12)
-                  return `Good morning, Aysha 🌅 — Today's Focus: ${firstFocus}`;
-                if (hr >= 12 && hr < 18)
-                  return "Good afternoon, Aysha ☀️ — Keep going!";
-                return "Good evening 🌙 — Reflection: What went well today?";
-              })()}
-            </p>
-            <h1
-              className="font-display text-4xl md:text-5xl lg:text-6xl font-bold mb-3"
-              style={{ color: "oklch(0.97 0.01 75)" }}
-            >
-              Aysha&apos;s Life Tracker
-            </h1>
-            <p
-              className="text-base md:text-lg max-w-md mx-auto"
-              style={{ color: "oklch(0.78 0.06 285)" }}
-            >
-              Nurture your soul · Grow your mind · Build your career
-            </p>
-          </motion.div>
-
-          {/* Focus Mode button */}
-          <div className="absolute top-4 left-4">
-            <button
-              type="button"
-              data-ocid="header.focus_mode.toggle"
-              onClick={() => setFocusMode((prev) => !prev)}
-              className="px-3 py-2 rounded-full transition-all text-sm font-semibold"
-              style={{
-                background: focusMode
-                  ? "oklch(0.55 0.22 55 / 0.4)"
-                  : "oklch(1 0 0 / 0.12)",
-                border: "1px solid oklch(1 0 0 / 0.2)",
-                color: focusMode
-                  ? "oklch(0.92 0.12 75)"
-                  : "oklch(0.88 0.08 80)",
-              }}
-              aria-label="Toggle focus mode"
-            >
-              {focusMode ? "Exit Focus Mode" : "⚡ Focus Mode"}
-            </button>
-          </div>
-          {/* Full Reset + Restart Week */}
-          <div className="absolute top-14 left-4 flex gap-2">
-            <RestartWeekButton onRestart={restartWeek} />
-            <FullResetButton />
-          </div>
-
-          {/* Dark mode toggle */}
-          <div className="absolute top-4 right-4">
-            <button
-              type="button"
-              data-ocid="header.dark_mode.toggle"
-              onClick={toggleDarkMode}
-              className="p-2 rounded-full transition-all"
-              style={{
-                background: "oklch(1 0 0 / 0.12)",
-                border: "1px solid oklch(1 0 0 / 0.2)",
-                color: "oklch(0.92 0.1 80)",
-              }}
-              aria-label="Toggle dark mode"
-            >
-              {darkMode ? (
-                <Sun className="w-5 h-5" />
-              ) : (
-                <Moon className="w-5 h-5" />
-              )}
-            </button>
-          </div>
-
-          {/* Quick stats bar */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35, duration: 0.5 }}
-            className="flex flex-wrap justify-center gap-3 mt-6"
-          >
-            {[
-              {
-                label: "Riyalah",
-                value: `${checkedItems.riyalah.length}/${riyalah.length}`,
-                color: "oklch(0.75 0.16 80)",
-              },
-              {
-                label: "MA Books",
-                value: `${checkedItems.mABooks.length}/${maBooks.length}`,
-                color: "oklch(0.7 0.12 155)",
-              },
-              {
-                label: "Students",
-                value: `${checkedItems.students.length}/${students.length}`,
-                color: "oklch(0.8 0.14 55)",
-              },
-              {
-                label: "Tasks Done",
-                value: `${dailyTasks.filter((t) => t.done).length}/${dailyTasks.length}`,
-                color: "oklch(0.72 0.14 225)",
-              },
-            ].map((stat) => (
-              <div
-                key={stat.label}
-                className="px-4 py-1.5 rounded-full text-sm font-medium"
-                style={{
-                  background: "oklch(1 0 0 / 0.08)",
-                  border: "1px solid oklch(1 0 0 / 0.15)",
-                  color: stat.color,
-                }}
-              >
-                <span style={{ color: "oklch(0.82 0.04 285)" }}>
-                  {stat.label}:{" "}
+              <div className="flex items-center justify-center gap-3 mb-3">
+                <Sparkles
+                  className="w-6 h-6"
+                  style={{ color: "oklch(0.85 0.14 80)" }}
+                />
+                <span
+                  className="font-display text-sm font-semibold tracking-widest uppercase"
+                  style={{ color: "oklch(0.75 0.12 80)" }}
+                >
+                  Personal Life Tracker
                 </span>
-                {stat.value}
+                <Sparkles
+                  className="w-6 h-6"
+                  style={{ color: "oklch(0.85 0.14 80)" }}
+                />
               </div>
-            ))}
-          </motion.div>
-        </div>
-      </header>
+              {/* Dynamic time greeting */}
+              <p
+                className="text-base font-semibold mb-2"
+                style={{ color: "oklch(0.88 0.12 80)" }}
+              >
+                {(() => {
+                  const hr = new Date().getHours();
+                  const firstFocus =
+                    focusItems[0]?.detail || "your top priority";
+                  if (hr >= 6 && hr < 12)
+                    return `Good morning, Aysha 🌅 — Today's Focus: ${firstFocus}`;
+                  if (hr >= 12 && hr < 18)
+                    return "Good afternoon, Aysha ☀️ — Keep going!";
+                  return "Good evening 🌙 — Reflection: What went well today?";
+                })()}
+              </p>
+              <h1
+                className="font-display text-4xl md:text-5xl lg:text-6xl font-bold mb-3"
+                style={{ color: "oklch(0.97 0.01 75)" }}
+              >
+                Aysha&apos;s Life Tracker
+              </h1>
+              <p
+                className="text-base md:text-lg max-w-md mx-auto"
+                style={{ color: "oklch(0.78 0.06 285)" }}
+              >
+                Nurture your soul · Grow your mind · Build your career
+              </p>
+            </motion.div>
 
-      {/* Main content */}
-      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 max-w-5xl">
-        {/* View Mode Bar */}
-        {!focusMode && (
-          <ViewModeBar mode={viewMode} onChange={handleViewModeChange} />
-        )}
-        {/* Quick Actions */}
-        {!focusMode && viewMode === "dashboard" && (
-          <QuickActionsPanel
-            onAddTask={() => {
-              const input = document.querySelector<HTMLInputElement>(
-                "[data-ocid='daily.todo.input']",
-              );
-              if (input) {
-                input.focus();
-                input.scrollIntoView({ behavior: "smooth" });
-              }
-            }}
-            onAddStudyTime={() => {
-              const input = document.querySelector<HTMLInputElement>(
-                "[data-ocid='study_hours.add_input']",
-              );
-              if (input) {
-                input.focus();
-                input.scrollIntoView({ behavior: "smooth" });
-              }
-            }}
-            onAddStudent={() => {
-              const btn = document.querySelector<HTMLButtonElement>(
-                "[data-ocid='students.add_button']",
-              );
-              btn?.click();
-            }}
-            onMarkRiyalah={handleMarkStreakToday}
-          />
-        )}
-        {/* ──────────────── LIFE PROGRESS BAR ──────────────── */}
-        {!focusMode && (
-          <LifeProgressBar
-            salahCount={salahCount}
-            studyHoursToday={weeklyHours[todayDayKey] || 0}
-            focusDone={focusItems.filter((f) => f.done).length}
-            focusTotal={focusItems.length}
-          />
-        )}
-
-        {/* ──────────────── MA EXAM COUNTDOWN ──────────────── */}
-        <div
-          data-ocid="exam_countdown.card"
-          className="rounded-2xl p-5 mb-6 text-center relative overflow-hidden"
-          style={{
-            background:
-              "linear-gradient(135deg, oklch(0.22 0.14 285 / 0.95) 0%, oklch(0.32 0.12 230) 50%, oklch(0.42 0.1 200) 100%)",
-            border: "1px solid oklch(0.5 0.12 285 / 0.3)",
-            boxShadow: "0 8px 32px oklch(0.12 0.1 285 / 0.4)",
-          }}
-        >
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <span className="text-xl">🎓</span>
-            <span
-              className="font-display text-lg font-bold"
-              style={{ color: "oklch(0.88 0.1 80)" }}
-            >
-              MA Exam Countdown
-            </span>
-          </div>
-          {!editingExamDate ? (
-            <div className="flex flex-col items-center gap-1">
-              <span
-                className="font-display text-5xl font-bold"
-                style={{ color: "oklch(0.95 0.12 75)" }}
-              >
-                {daysUntilExam}
-              </span>
-              <span
-                className="text-base"
-                style={{ color: "oklch(0.72 0.08 285)" }}
-              >
-                days until next exam
-              </span>
-              <span
-                className="text-xs mt-1"
-                style={{ color: "oklch(0.55 0.08 285)" }}
-              >
-                {new Date(examDate).toLocaleDateString("en-IN", {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </span>
+            {/* Focus Mode button */}
+            <div className="absolute top-4 left-4">
               <button
                 type="button"
-                data-ocid="exam_countdown.edit_button"
-                onClick={() => setEditingExamDate(true)}
-                className="mt-2 px-3 py-1 rounded-lg text-xs transition-all"
+                data-ocid="header.focus_mode.toggle"
+                onClick={() => setFocusMode((prev) => !prev)}
+                className="px-3 py-2 rounded-full transition-all text-sm font-semibold"
                 style={{
-                  background: "oklch(1 0 0 / 0.1)",
-                  color: "oklch(0.75 0.1 80)",
-                  border: "1px solid oklch(1 0 0 / 0.15)",
+                  background: focusMode
+                    ? "oklch(0.55 0.22 55 / 0.4)"
+                    : "oklch(1 0 0 / 0.12)",
+                  border: "1px solid oklch(1 0 0 / 0.2)",
+                  color: focusMode
+                    ? "oklch(0.92 0.12 75)"
+                    : "oklch(0.88 0.08 80)",
                 }}
+                aria-label="Toggle focus mode"
               >
-                <Pencil className="w-3 h-3 inline mr-1" />
-                Set exam date
+                {focusMode ? "Exit Focus Mode" : "⚡ Focus Mode"}
               </button>
             </div>
-          ) : (
-            <div className="flex items-center justify-center gap-2 mt-2">
-              <input
-                type="date"
-                data-ocid="exam_countdown.input"
-                value={examDate}
-                onChange={(e) => {
-                  setExamDate(e.target.value);
-                  localStorage.setItem("exam_date", e.target.value);
-                }}
-                className="rounded-lg px-3 py-1.5 text-sm"
+            {/* Full Reset + Restart Week */}
+            <div className="absolute top-14 left-4 flex gap-2">
+              <RestartWeekButton onRestart={restartWeek} />
+              <FullResetButton />
+            </div>
+
+            {/* Dark mode toggle */}
+            <div className="absolute top-4 right-4">
+              <button
+                type="button"
+                data-ocid="header.dark_mode.toggle"
+                onClick={toggleDarkMode}
+                className="p-2 rounded-full transition-all"
                 style={{
                   background: "oklch(1 0 0 / 0.12)",
-                  color: "oklch(0.9 0.06 285)",
-                  border: "1px solid oklch(0.6 0.1 285 / 0.4)",
+                  border: "1px solid oklch(1 0 0 / 0.2)",
+                  color: "oklch(0.92 0.1 80)",
                 }}
-              />
-              <button
-                type="button"
-                data-ocid="exam_countdown.save_button"
-                onClick={() => setEditingExamDate(false)}
-                className="px-3 py-1.5 rounded-lg text-sm font-semibold"
-                style={{ background: "oklch(0.55 0.18 150)", color: "white" }}
+                aria-label="Toggle dark mode"
               >
-                Save
+                {darkMode ? (
+                  <Sun className="w-5 h-5" />
+                ) : (
+                  <Moon className="w-5 h-5" />
+                )}
               </button>
             </div>
+
+            {/* Quick stats bar */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35, duration: 0.5 }}
+              className="flex flex-wrap justify-center gap-3 mt-6"
+            >
+              {[
+                {
+                  label: "Riyalah",
+                  value: `${checkedItems.riyalah.length}/${riyalah.length}`,
+                  color: "oklch(0.75 0.16 80)",
+                },
+                {
+                  label: "MA Books",
+                  value: `${checkedItems.mABooks.length}/${maBooks.length}`,
+                  color: "oklch(0.7 0.12 155)",
+                },
+                {
+                  label: "Students",
+                  value: `${checkedItems.students.length}/${students.length}`,
+                  color: "oklch(0.8 0.14 55)",
+                },
+                {
+                  label: "Tasks Done",
+                  value: `${dailyTasks.filter((t) => t.done).length}/${dailyTasks.length}`,
+                  color: "oklch(0.72 0.14 225)",
+                },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="px-4 py-1.5 rounded-full text-sm font-medium"
+                  style={{
+                    background: "oklch(1 0 0 / 0.08)",
+                    border: "1px solid oklch(1 0 0 / 0.15)",
+                    color: stat.color,
+                  }}
+                >
+                  <span style={{ color: "oklch(0.82 0.04 285)" }}>
+                    {stat.label}:{" "}
+                  </span>
+                  {stat.value}
+                </div>
+              ))}
+            </motion.div>
+          </div>
+        </header>
+
+        {/* Main content */}
+        <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 max-w-5xl">
+          {/* View Mode Bar */}
+          {!focusMode && (
+            <ViewModeBar mode={viewMode} onChange={handleViewModeChange} />
           )}
-        </div>
-
-        {/* ──────────────── QUOTE OF THE DAY ──────────────── */}
-        {!focusMode && <QuoteOfDay />}
-        {!focusMode && (
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <div
-              data-ocid="stats.study_hours.card"
-              className="rounded-2xl p-4 text-center"
-              style={{
-                background:
-                  "linear-gradient(135deg, oklch(0.96 0.03 225), oklch(0.93 0.04 215))",
-                border: "1px solid oklch(0.85 0.04 225 / 0.5)",
+          {/* Quick Actions */}
+          {!focusMode && viewMode === "dashboard" && (
+            <QuickActionsPanel
+              onAddTask={() => {
+                const input = document.querySelector<HTMLInputElement>(
+                  "[data-ocid='daily.todo.input']",
+                );
+                if (input) {
+                  input.focus();
+                  input.scrollIntoView({ behavior: "smooth" });
+                }
               }}
-            >
-              <div
-                className="text-2xl font-bold font-display"
-                style={{ color: "oklch(0.38 0.16 225)" }}
-              >
-                {totalWeeklyHours.toFixed(1)}h
-              </div>
-              <div
-                className="text-xs mt-0.5"
-                style={{ color: "oklch(0.55 0.1 225)" }}
-              >
-                Study Hours
-              </div>
-              <div
-                className="text-xs"
-                style={{ color: "oklch(0.65 0.08 225)" }}
-              >
-                This Week
-              </div>
-            </div>
-            <div
-              data-ocid="stats.books_completed.card"
-              className="rounded-2xl p-4 text-center"
-              style={{
-                background:
-                  "linear-gradient(135deg, oklch(0.96 0.025 155), oklch(0.93 0.03 145))",
-                border: "1px solid oklch(0.85 0.03 155 / 0.5)",
+              onAddStudyTime={() => {
+                const input = document.querySelector<HTMLInputElement>(
+                  "[data-ocid='study_hours.add_input']",
+                );
+                if (input) {
+                  input.focus();
+                  input.scrollIntoView({ behavior: "smooth" });
+                }
               }}
-            >
-              <div
-                className="text-2xl font-bold font-display"
-                style={{ color: "oklch(0.38 0.14 155)" }}
-              >
-                {booksCompletedCount}
-              </div>
-              <div
-                className="text-xs mt-0.5"
-                style={{ color: "oklch(0.5 0.1 155)" }}
-              >
-                Books
-              </div>
-              <div className="text-xs" style={{ color: "oklch(0.6 0.08 155)" }}>
-                Completed
-              </div>
-            </div>
-            <div
-              data-ocid="stats.tasks_completed.card"
-              className="rounded-2xl p-4 text-center"
-              style={{
-                background:
-                  "linear-gradient(135deg, oklch(0.96 0.03 60), oklch(0.93 0.04 50))",
-                border: "1px solid oklch(0.85 0.04 55 / 0.5)",
+              onAddStudent={() => {
+                const btn = document.querySelector<HTMLButtonElement>(
+                  "[data-ocid='students.add_button']",
+                );
+                btn?.click();
               }}
-            >
-              <div
-                className="text-2xl font-bold font-display"
-                style={{ color: "oklch(0.38 0.16 50)" }}
-              >
-                {tasksCompletedCount}
-              </div>
-              <div
-                className="text-xs mt-0.5"
-                style={{ color: "oklch(0.52 0.12 55)" }}
-              >
-                Tasks
-              </div>
-              <div className="text-xs" style={{ color: "oklch(0.62 0.1 55)" }}>
-                Completed
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ──────────────── TODAY'S REMINDER + FOCUS ──────────────── */}
-        {!focusMode && (
-          <div className="grid gap-4 md:grid-cols-2 mb-6">
-            {/* Reminder */}
-            <div
-              data-ocid="reminder.card"
-              className="rounded-2xl p-5"
-              style={{
-                background:
-                  "linear-gradient(135deg, oklch(0.98 0.02 80), oklch(0.95 0.04 70))",
-                border: "1px solid oklch(0.88 0.05 75 / 0.6)",
-              }}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <span
-                  className="font-display font-semibold text-base"
-                  style={{ color: "oklch(0.38 0.12 60)" }}
-                >
-                  ✨ Today&apos;s Reminder
-                </span>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    data-ocid="reminder.cycle_button"
-                    onClick={() => {
-                      setReminderIdx(
-                        (prev) => (prev + 1) % REMINDER_QUOTES.length,
-                      );
-                      setCustomReminder("");
-                    }}
-                    className="px-2 py-1 rounded-lg text-xs"
-                    style={{
-                      background: "oklch(0.88 0.04 70 / 0.6)",
-                      color: "oklch(0.48 0.1 60)",
-                    }}
-                  >
-                    Next
-                  </button>
-                  <button
-                    type="button"
-                    data-ocid="reminder.edit_button"
-                    onClick={() => setEditingReminder(!editingReminder)}
-                    className="px-2 py-1 rounded-lg text-xs"
-                    style={{
-                      background: "oklch(0.88 0.04 70 / 0.6)",
-                      color: "oklch(0.48 0.1 60)",
-                    }}
-                  >
-                    <Pencil className="w-3 h-3 inline" />
-                  </button>
-                </div>
-              </div>
-              {editingReminder ? (
-                <div className="space-y-2">
-                  <textarea
-                    data-ocid="reminder.textarea"
-                    value={customReminder || currentReminder}
-                    onChange={(e) => setCustomReminder(e.target.value)}
-                    rows={3}
-                    className="w-full rounded-xl p-2 text-sm resize-none"
-                    style={{
-                      background: "oklch(0.92 0.025 75 / 0.5)",
-                      color: "oklch(0.32 0.08 60)",
-                      border: "1px solid oklch(0.8 0.05 70 / 0.5)",
-                    }}
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      data-ocid="reminder.save_button"
-                      onClick={() => {
-                        localStorage.setItem("custom_reminder", customReminder);
-                        setEditingReminder(false);
-                      }}
-                      className="px-3 py-1 rounded-lg text-xs font-semibold"
-                      style={{
-                        background: "oklch(0.5 0.16 150)",
-                        color: "white",
-                      }}
-                    >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      data-ocid="reminder.cancel_button"
-                      onClick={() => setEditingReminder(false)}
-                      className="px-3 py-1 rounded-lg text-xs"
-                      style={{
-                        background: "oklch(0.88 0.03 60)",
-                        color: "oklch(0.45 0.08 60)",
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p
-                  className="text-sm italic leading-relaxed"
-                  style={{ color: "oklch(0.42 0.1 60)" }}
-                >
-                  &ldquo;{currentReminder}&rdquo;
-                </p>
-              )}
-            </div>
-
-            {/* Today's Focus */}
-            <div
-              data-ocid="focus.card"
-              className="rounded-2xl p-5"
-              style={{
-                background:
-                  "linear-gradient(135deg, oklch(0.97 0.025 285), oklch(0.94 0.03 275))",
-                border: "1px solid oklch(0.85 0.04 285 / 0.5)",
-              }}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <span
-                  className="font-display font-semibold text-base"
-                  style={{ color: "oklch(0.35 0.12 285)" }}
-                >
-                  🎯 Today&apos;s Focus
-                </span>
-              </div>
-              <div className="space-y-1.5 mb-3">
-                {focusItems.map((item, i) => (
-                  <div
-                    key={`focus-${item.label}-${i}`}
-                    data-ocid={`focus.item.${i + 1}`}
-                    className="flex items-center gap-2"
-                  >
-                    <Checkbox
-                      data-ocid={`focus.checkbox.${i + 1}`}
-                      checked={item.done}
-                      onCheckedChange={() => {
-                        const next = focusItems.map((f, idx) =>
-                          idx === i ? { ...f, done: !f.done } : f,
-                        );
-                        saveFocusItems(next);
-                      }}
-                      id={`focus-${i}`}
-                    />
-                    <label
-                      htmlFor={`focus-${i}`}
-                      className="text-sm flex-1 cursor-pointer"
-                      style={{
-                        color: item.done
-                          ? "oklch(0.6 0.06 285)"
-                          : "oklch(0.32 0.08 285)",
-                        textDecoration: item.done ? "line-through" : "none",
-                      }}
-                    >
-                      <span className="font-semibold">{item.label}:</span>{" "}
-                      {item.detail}
-                    </label>
-                    <button
-                      type="button"
-                      data-ocid={`focus.delete_button.${i + 1}`}
-                      onClick={() =>
-                        saveFocusItems(focusItems.filter((_, idx) => idx !== i))
-                      }
-                      className="p-1 rounded opacity-0 group-hover:opacity-100 hover:opacity-100"
-                      style={{ color: "oklch(0.55 0.18 25)" }}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-1.5">
-                <Input
-                  data-ocid="focus.label.input"
-                  placeholder="Label"
-                  value={focusInput}
-                  onChange={(e) => setFocusInput(e.target.value)}
-                  className="flex-1 rounded-lg border-0 text-xs h-8"
-                  style={{
-                    background: "oklch(0.9 0.025 285 / 0.5)",
-                    color: "oklch(0.28 0.06 285)",
-                  }}
-                />
-                <Input
-                  data-ocid="focus.detail.input"
-                  placeholder="Detail"
-                  value={focusDetailInput}
-                  onChange={(e) => setFocusDetailInput(e.target.value)}
-                  className="flex-1 rounded-lg border-0 text-xs h-8"
-                  style={{
-                    background: "oklch(0.9 0.025 285 / 0.5)",
-                    color: "oklch(0.28 0.06 285)",
-                  }}
-                />
-                <Button
-                  data-ocid="focus.add_button"
-                  onClick={() => {
-                    if (!focusInput.trim()) return;
-                    saveFocusItems([
-                      ...focusItems,
-                      {
-                        label: focusInput.trim(),
-                        detail: focusDetailInput.trim(),
-                        done: false,
-                      },
-                    ]);
-                    setFocusInput("");
-                    setFocusDetailInput("");
-                  }}
-                  className="h-8 px-2 rounded-lg"
-                  style={{ background: "oklch(0.48 0.16 285)", color: "white" }}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ──────────────── PRAYER TIME + SALAH ──────────────── */}
-        {!focusMode && (
-          <PrayerTimeReminder onSalahCountChange={setSalahCount} />
-        )}
-
-        {/* ──────────────── LIFE BALANCE WHEEL + EXAM PREP ──────────────── */}
-        {!focusMode && viewMode === "dashboard" && (
-          <CollapsibleSection
-            id="balance"
-            title="Life Balance & Exam Prep"
-            icon="⚖️"
-            defaultOpen={false}
-          >
-            <div className="grid gap-4 md:grid-cols-2 mb-6">
-              <LifeBalanceWheel />
-              <ExamPrepMeter />
-            </div>
-          </CollapsibleSection>
-        )}
-
-        {/* ──────────────── HABIT HEATMAP ──────────────── */}
-        {!focusMode && (viewMode === "dashboard" || viewMode === "review") && (
-          <CollapsibleSection
-            id="heatmap"
-            title="Habit Heatmap"
-            icon="📅"
-            defaultOpen={false}
-          >
-            <ImprovedHabitHeatmap />
-          </CollapsibleSection>
-        )}
-
-        {/* ──────────────── SMART WEEKLY REVIEW + WEEKLY REFLECTION ──────────────── */}
-        {!focusMode && (viewMode === "dashboard" || viewMode === "review") && (
-          <div className="grid gap-4 md:grid-cols-2 mb-6">
-            <SmartWeeklyReview
-              weeklyHoursTotal={totalWeeklyHours}
-              riyalahPct={riyalahPct}
-              certsCompleted={checkedItems.certificates.length}
-              incomeTotal={monthlyIncome}
+              onMarkRiyalah={handleMarkStreakToday}
             />
-            <WeeklyReflection />
-          </div>
-        )}
+          )}
+          {/* ──────────────── LIFE PROGRESS BAR ──────────────── */}
+          {!focusMode && (
+            <LifeProgressBar
+              salahCount={salahCount}
+              studyHoursToday={weeklyHours[todayDayKey] || 0}
+              focusDone={focusItems.filter((f) => f.done).length}
+              focusTotal={focusItems.length}
+            />
+          )}
 
-        {/* ──────────────── WEEKLY PLANNING BOARD ──────────────── */}
-        {!focusMode && <WeeklyPlanningBoard />}
-        {/* ──────────────── STUDY HOURS + WINS ──────────────── */}
-        {!focusMode &&
-          (viewMode === "dashboard" || viewMode === "deepwork") && (
-            <div className="grid gap-4 md:grid-cols-2 mb-6">
-              {/* Study Hours This Week */}
+          {/* ──────────────── MA EXAM COUNTDOWN ──────────────── */}
+          <div
+            data-ocid="exam_countdown.card"
+            className="rounded-2xl p-5 mb-6 text-center relative overflow-hidden"
+            style={{
+              background:
+                "linear-gradient(135deg, oklch(0.22 0.14 285 / 0.95) 0%, oklch(0.32 0.12 230) 50%, oklch(0.42 0.1 200) 100%)",
+              border: "1px solid oklch(0.5 0.12 285 / 0.3)",
+              boxShadow: "0 8px 32px oklch(0.12 0.1 285 / 0.4)",
+            }}
+          >
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <span className="text-xl">🎓</span>
+              <span
+                className="font-display text-lg font-bold"
+                style={{ color: "oklch(0.88 0.1 80)" }}
+              >
+                MA Exam Countdown
+              </span>
+            </div>
+            {!editingExamDate ? (
+              <div className="flex flex-col items-center gap-1">
+                <span
+                  className="font-display text-5xl font-bold"
+                  style={{ color: "oklch(0.95 0.12 75)" }}
+                >
+                  {daysUntilExam}
+                </span>
+                <span
+                  className="text-base"
+                  style={{ color: "oklch(0.72 0.08 285)" }}
+                >
+                  days until next exam
+                </span>
+                <span
+                  className="text-xs mt-1"
+                  style={{ color: "oklch(0.55 0.08 285)" }}
+                >
+                  {new Date(examDate).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </span>
+                <button
+                  type="button"
+                  data-ocid="exam_countdown.edit_button"
+                  onClick={() => setEditingExamDate(true)}
+                  className="mt-2 px-3 py-1 rounded-lg text-xs transition-all"
+                  style={{
+                    background: "oklch(1 0 0 / 0.1)",
+                    color: "oklch(0.75 0.1 80)",
+                    border: "1px solid oklch(1 0 0 / 0.15)",
+                  }}
+                >
+                  <Pencil className="w-3 h-3 inline mr-1" />
+                  Set exam date
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2 mt-2">
+                <input
+                  type="date"
+                  data-ocid="exam_countdown.input"
+                  value={examDate}
+                  onChange={(e) => {
+                    setExamDate(e.target.value);
+                    localStorage.setItem("exam_date", e.target.value);
+                  }}
+                  className="rounded-lg px-3 py-1.5 text-sm"
+                  style={{
+                    background: "oklch(1 0 0 / 0.12)",
+                    color: "oklch(0.9 0.06 285)",
+                    border: "1px solid oklch(0.6 0.1 285 / 0.4)",
+                  }}
+                />
+                <button
+                  type="button"
+                  data-ocid="exam_countdown.save_button"
+                  onClick={() => setEditingExamDate(false)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-semibold"
+                  style={{ background: "oklch(0.55 0.18 150)", color: "white" }}
+                >
+                  Save
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* ──────────────── QUOTE OF THE DAY ──────────────── */}
+          {!focusMode && <QuoteOfDay />}
+          {!focusMode && (
+            <div className="grid grid-cols-3 gap-3 mb-6">
               <div
-                data-ocid="study_hours.card"
-                className="rounded-2xl p-5"
+                data-ocid="stats.study_hours.card"
+                className="rounded-2xl p-4 text-center"
                 style={{
                   background:
                     "linear-gradient(135deg, oklch(0.96 0.03 225), oklch(0.93 0.04 215))",
                   border: "1px solid oklch(0.85 0.04 225 / 0.5)",
                 }}
               >
-                <div className="flex items-center justify-between mb-3">
-                  <div
-                    className="font-display font-semibold text-base"
-                    style={{ color: "oklch(0.35 0.14 225)" }}
-                  >
-                    📊 Study Hours This Week
-                  </div>
-                  <ResetWeeklyDataButton onReset={resetWeeklyData} />
+                <div
+                  className="text-2xl font-bold font-display"
+                  style={{ color: "oklch(0.38 0.16 225)" }}
+                >
+                  {totalWeeklyHours.toFixed(1)}h
                 </div>
-                <div className="space-y-1.5 mb-3">
-                  {DAYS_OF_WEEK.map((day) => {
-                    const hours = weeklyHours[day] || 0;
-                    const maxH = Math.max(...Object.values(weeklyHours), 1);
-                    return (
-                      <div key={day} className="flex items-center gap-2">
-                        <span
-                          className="text-xs w-7 shrink-0 font-medium"
-                          style={{ color: "oklch(0.48 0.12 225)" }}
-                        >
-                          {day}
-                        </span>
-                        <div
-                          className="flex-1 h-3 rounded-full overflow-hidden"
-                          style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
-                        >
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${(hours / maxH) * 100}%`,
-                              background:
-                                day === todayDayKey
-                                  ? "linear-gradient(90deg, oklch(0.5 0.18 225), oklch(0.6 0.16 200))"
-                                  : "oklch(0.65 0.12 225 / 0.7)",
-                            }}
-                          />
-                        </div>
-                        <span
-                          className="text-xs w-8 text-right shrink-0"
-                          style={{ color: "oklch(0.5 0.1 225)" }}
-                        >
-                          {hours >= 1
-                            ? `${hours.toFixed(1)}h`
-                            : `${Math.round(hours * 60)}m`}
-                        </span>
-                      </div>
-                    );
-                  })}
+                <div
+                  className="text-xs mt-0.5"
+                  style={{ color: "oklch(0.55 0.1 225)" }}
+                >
+                  Study Hours
                 </div>
-                <div className="flex gap-2">
-                  <Input
-                    data-ocid="study_hours.add_input"
-                    type="number"
-                    placeholder="Add minutes"
-                    value={addMinutesInput}
-                    onChange={(e) => setAddMinutesInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && addStudyMinutes()}
-                    className="flex-1 rounded-xl border-0 text-sm h-8"
-                    style={{
-                      background: "oklch(0.9 0.025 225 / 0.5)",
-                      color: "oklch(0.28 0.08 225)",
-                    }}
-                  />
-                  <Button
-                    data-ocid="study_hours.add_button"
-                    onClick={addStudyMinutes}
-                    className="h-8 px-3 rounded-xl text-xs"
-                    style={{
-                      background: "oklch(0.5 0.18 225)",
-                      color: "white",
-                    }}
-                  >
-                    + Add
-                  </Button>
+                <div
+                  className="text-xs"
+                  style={{ color: "oklch(0.65 0.08 225)" }}
+                >
+                  This Week
                 </div>
               </div>
-
-              {/* Today's 3 Wins */}
               <div
-                data-ocid="wins.card"
+                data-ocid="stats.books_completed.card"
+                className="rounded-2xl p-4 text-center"
+                style={{
+                  background:
+                    "linear-gradient(135deg, oklch(0.96 0.025 155), oklch(0.93 0.03 145))",
+                  border: "1px solid oklch(0.85 0.03 155 / 0.5)",
+                }}
+              >
+                <div
+                  className="text-2xl font-bold font-display"
+                  style={{ color: "oklch(0.38 0.14 155)" }}
+                >
+                  {booksCompletedCount}
+                </div>
+                <div
+                  className="text-xs mt-0.5"
+                  style={{ color: "oklch(0.5 0.1 155)" }}
+                >
+                  Books
+                </div>
+                <div
+                  className="text-xs"
+                  style={{ color: "oklch(0.6 0.08 155)" }}
+                >
+                  Completed
+                </div>
+              </div>
+              <div
+                data-ocid="stats.tasks_completed.card"
+                className="rounded-2xl p-4 text-center"
+                style={{
+                  background:
+                    "linear-gradient(135deg, oklch(0.96 0.03 60), oklch(0.93 0.04 50))",
+                  border: "1px solid oklch(0.85 0.04 55 / 0.5)",
+                }}
+              >
+                <div
+                  className="text-2xl font-bold font-display"
+                  style={{ color: "oklch(0.38 0.16 50)" }}
+                >
+                  {tasksCompletedCount}
+                </div>
+                <div
+                  className="text-xs mt-0.5"
+                  style={{ color: "oklch(0.52 0.12 55)" }}
+                >
+                  Tasks
+                </div>
+                <div
+                  className="text-xs"
+                  style={{ color: "oklch(0.62 0.1 55)" }}
+                >
+                  Completed
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ──────────────── TODAY'S REMINDER + FOCUS ──────────────── */}
+          {!focusMode && (
+            <div className="grid gap-4 md:grid-cols-2 mb-6">
+              {/* Reminder */}
+              <div
+                data-ocid="reminder.card"
                 className="rounded-2xl p-5"
                 style={{
                   background:
-                    "linear-gradient(135deg, oklch(0.97 0.03 55), oklch(0.94 0.04 45))",
-                  border: "1px solid oklch(0.86 0.05 55 / 0.5)",
+                    "linear-gradient(135deg, oklch(0.98 0.02 80), oklch(0.95 0.04 70))",
+                  border: "1px solid oklch(0.88 0.05 75 / 0.6)",
                 }}
               >
-                <div className="flex items-center gap-2 mb-3">
-                  <Trophy
-                    className="w-5 h-5"
-                    style={{ color: "oklch(0.58 0.2 55)" }}
-                  />
+                <div className="flex items-center justify-between mb-3">
                   <span
                     className="font-display font-semibold text-base"
-                    style={{ color: "oklch(0.38 0.14 55)" }}
+                    style={{ color: "oklch(0.38 0.12 60)" }}
                   >
-                    Today&apos;s 3 Wins
+                    ✨ Today&apos;s Reminder
+                  </span>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      data-ocid="reminder.cycle_button"
+                      onClick={() => {
+                        setReminderIdx(
+                          (prev) => (prev + 1) % REMINDER_QUOTES.length,
+                        );
+                        setCustomReminder("");
+                      }}
+                      className="px-2 py-1 rounded-lg text-xs"
+                      style={{
+                        background: "oklch(0.88 0.04 70 / 0.6)",
+                        color: "oklch(0.48 0.1 60)",
+                      }}
+                    >
+                      Next
+                    </button>
+                    <button
+                      type="button"
+                      data-ocid="reminder.edit_button"
+                      onClick={() => setEditingReminder(!editingReminder)}
+                      className="px-2 py-1 rounded-lg text-xs"
+                      style={{
+                        background: "oklch(0.88 0.04 70 / 0.6)",
+                        color: "oklch(0.48 0.1 60)",
+                      }}
+                    >
+                      <Pencil className="w-3 h-3 inline" />
+                    </button>
+                  </div>
+                </div>
+                {editingReminder ? (
+                  <div className="space-y-2">
+                    <textarea
+                      data-ocid="reminder.textarea"
+                      value={customReminder || currentReminder}
+                      onChange={(e) => setCustomReminder(e.target.value)}
+                      rows={3}
+                      className="w-full rounded-xl p-2 text-sm resize-none"
+                      style={{
+                        background: "oklch(0.92 0.025 75 / 0.5)",
+                        color: "oklch(0.32 0.08 60)",
+                        border: "1px solid oklch(0.8 0.05 70 / 0.5)",
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        data-ocid="reminder.save_button"
+                        onClick={() => {
+                          localStorage.setItem(
+                            "custom_reminder",
+                            customReminder,
+                          );
+                          setEditingReminder(false);
+                        }}
+                        className="px-3 py-1 rounded-lg text-xs font-semibold"
+                        style={{
+                          background: "oklch(0.5 0.16 150)",
+                          color: "white",
+                        }}
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        data-ocid="reminder.cancel_button"
+                        onClick={() => setEditingReminder(false)}
+                        className="px-3 py-1 rounded-lg text-xs"
+                        style={{
+                          background: "oklch(0.88 0.03 60)",
+                          color: "oklch(0.45 0.08 60)",
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p
+                    className="text-sm italic leading-relaxed"
+                    style={{ color: "oklch(0.42 0.1 60)" }}
+                  >
+                    &ldquo;{currentReminder}&rdquo;
+                  </p>
+                )}
+              </div>
+
+              {/* Today's Focus */}
+              <div
+                data-ocid="focus.card"
+                className="rounded-2xl p-5"
+                style={{
+                  background:
+                    "linear-gradient(135deg, oklch(0.97 0.025 285), oklch(0.94 0.03 275))",
+                  border: "1px solid oklch(0.85 0.04 285 / 0.5)",
+                }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <span
+                    className="font-display font-semibold text-base"
+                    style={{ color: "oklch(0.35 0.12 285)" }}
+                  >
+                    🎯 Today&apos;s Focus
                   </span>
                 </div>
-                <div className="space-y-2.5">
-                  {wins.map((win, i) => (
+                <div className="space-y-1.5 mb-3">
+                  {focusItems.map((item, i) => (
                     <div
-                      key={`win-${win.label}-${i}`}
-                      data-ocid={`wins.item.${i + 1}`}
-                      className="flex items-center gap-3"
+                      key={`focus-${item.label}-${i}`}
+                      data-ocid={`focus.item.${i + 1}`}
+                      className="flex items-center gap-2"
                     >
                       <Checkbox
-                        data-ocid={`wins.checkbox.${i + 1}`}
-                        checked={win.done}
-                        onCheckedChange={() =>
-                          saveWins(
-                            wins.map((w, idx) =>
-                              idx === i ? { ...w, done: !w.done } : w,
-                            ),
+                        data-ocid={`focus.checkbox.${i + 1}`}
+                        checked={item.done}
+                        onCheckedChange={() => {
+                          const next = focusItems.map((f, idx) =>
+                            idx === i ? { ...f, done: !f.done } : f,
+                          );
+                          saveFocusItems(next);
+                        }}
+                        id={`focus-${i}`}
+                      />
+                      <label
+                        htmlFor={`focus-${i}`}
+                        className="text-sm flex-1 cursor-pointer"
+                        style={{
+                          color: item.done
+                            ? "oklch(0.6 0.06 285)"
+                            : "oklch(0.32 0.08 285)",
+                          textDecoration: item.done ? "line-through" : "none",
+                        }}
+                      >
+                        <span className="font-semibold">{item.label}:</span>{" "}
+                        {item.detail}
+                      </label>
+                      <button
+                        type="button"
+                        data-ocid={`focus.delete_button.${i + 1}`}
+                        onClick={() =>
+                          saveFocusItems(
+                            focusItems.filter((_, idx) => idx !== i),
                           )
                         }
-                        id={`win-${i}`}
-                      />
-                      {editingWinIdx === i ? (
-                        <div className="flex gap-1.5 flex-1">
-                          <Input
-                            value={editingWinLabel}
-                            onChange={(e) => setEditingWinLabel(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
+                        className="p-1 rounded opacity-0 group-hover:opacity-100 hover:opacity-100"
+                        style={{ color: "oklch(0.55 0.18 25)" }}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-1.5">
+                  <Input
+                    data-ocid="focus.label.input"
+                    placeholder="Label"
+                    value={focusInput}
+                    onChange={(e) => setFocusInput(e.target.value)}
+                    className="flex-1 rounded-lg border-0 text-xs h-8"
+                    style={{
+                      background: "oklch(0.9 0.025 285 / 0.5)",
+                      color: "oklch(0.28 0.06 285)",
+                    }}
+                  />
+                  <Input
+                    data-ocid="focus.detail.input"
+                    placeholder="Detail"
+                    value={focusDetailInput}
+                    onChange={(e) => setFocusDetailInput(e.target.value)}
+                    className="flex-1 rounded-lg border-0 text-xs h-8"
+                    style={{
+                      background: "oklch(0.9 0.025 285 / 0.5)",
+                      color: "oklch(0.28 0.06 285)",
+                    }}
+                  />
+                  <Button
+                    data-ocid="focus.add_button"
+                    onClick={() => {
+                      if (!focusInput.trim()) return;
+                      saveFocusItems([
+                        ...focusItems,
+                        {
+                          label: focusInput.trim(),
+                          detail: focusDetailInput.trim(),
+                          done: false,
+                        },
+                      ]);
+                      setFocusInput("");
+                      setFocusDetailInput("");
+                    }}
+                    className="h-8 px-2 rounded-lg"
+                    style={{
+                      background: "oklch(0.48 0.16 285)",
+                      color: "white",
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ──────────────── PRAYER TIME + SALAH ──────────────── */}
+          {!focusMode && (
+            <PrayerTimeReminder onSalahCountChange={setSalahCount} />
+          )}
+
+          {/* ──────────────── LIFE BALANCE WHEEL + EXAM PREP ──────────────── */}
+          {!focusMode && viewMode === "dashboard" && (
+            <CollapsibleSection
+              id="balance"
+              title="Life Balance & Exam Prep"
+              icon="⚖️"
+              defaultOpen={false}
+            >
+              <div className="grid gap-4 md:grid-cols-2 mb-6">
+                <LifeBalanceWheel />
+                <ExamPrepMeter />
+              </div>
+            </CollapsibleSection>
+          )}
+
+          {/* ──────────────── HABIT HEATMAP ──────────────── */}
+          {!focusMode &&
+            (viewMode === "dashboard" || viewMode === "review") && (
+              <CollapsibleSection
+                id="heatmap"
+                title="Habit Heatmap"
+                icon="📅"
+                defaultOpen={false}
+              >
+                <ImprovedHabitHeatmap />
+              </CollapsibleSection>
+            )}
+
+          {/* ──────────────── SMART WEEKLY REVIEW + WEEKLY REFLECTION ──────────────── */}
+          {!focusMode &&
+            (viewMode === "dashboard" || viewMode === "review") && (
+              <div className="grid gap-4 md:grid-cols-2 mb-6">
+                <SmartWeeklyReview
+                  weeklyHoursTotal={totalWeeklyHours}
+                  riyalahPct={riyalahPct}
+                  certsCompleted={checkedItems.certificates.length}
+                  incomeTotal={monthlyIncome}
+                />
+                <WeeklyReflection />
+              </div>
+            )}
+
+          {/* ──────────────── WEEKLY PLANNING BOARD ──────────────── */}
+          {!focusMode && <WeeklyPlanningBoard />}
+          {/* ──────────────── STUDY HOURS + WINS ──────────────── */}
+          {!focusMode &&
+            (viewMode === "dashboard" || viewMode === "deepwork") && (
+              <div className="grid gap-4 md:grid-cols-2 mb-6">
+                {/* Study Hours This Week */}
+                <div
+                  data-ocid="study_hours.card"
+                  className="rounded-2xl p-5"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, oklch(0.96 0.03 225), oklch(0.93 0.04 215))",
+                    border: "1px solid oklch(0.85 0.04 225 / 0.5)",
+                  }}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div
+                      className="font-display font-semibold text-base"
+                      style={{ color: "oklch(0.35 0.14 225)" }}
+                    >
+                      📊 Study Hours This Week
+                    </div>
+                    <ResetWeeklyDataButton onReset={resetWeeklyData} />
+                  </div>
+                  <div className="space-y-1.5 mb-3">
+                    {DAYS_OF_WEEK.map((day) => {
+                      const hours = weeklyHours[day] || 0;
+                      const maxH = Math.max(...Object.values(weeklyHours), 1);
+                      return (
+                        <div key={day} className="flex items-center gap-2">
+                          <span
+                            className="text-xs w-7 shrink-0 font-medium"
+                            style={{ color: "oklch(0.48 0.12 225)" }}
+                          >
+                            {day}
+                          </span>
+                          <div
+                            className="flex-1 h-3 rounded-full overflow-hidden"
+                            style={{
+                              background: "oklch(0.88 0.025 225 / 0.4)",
+                            }}
+                          >
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${(hours / maxH) * 100}%`,
+                                background:
+                                  day === todayDayKey
+                                    ? "linear-gradient(90deg, oklch(0.5 0.18 225), oklch(0.6 0.16 200))"
+                                    : "oklch(0.65 0.12 225 / 0.7)",
+                              }}
+                            />
+                          </div>
+                          <span
+                            className="text-xs w-8 text-right shrink-0"
+                            style={{ color: "oklch(0.5 0.1 225)" }}
+                          >
+                            {hours >= 1
+                              ? `${hours.toFixed(1)}h`
+                              : `${Math.round(hours * 60)}m`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      data-ocid="study_hours.add_input"
+                      type="number"
+                      placeholder="Add minutes"
+                      value={addMinutesInput}
+                      onChange={(e) => setAddMinutesInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addStudyMinutes()}
+                      className="flex-1 rounded-xl border-0 text-sm h-8"
+                      style={{
+                        background: "oklch(0.9 0.025 225 / 0.5)",
+                        color: "oklch(0.28 0.08 225)",
+                      }}
+                    />
+                    <Button
+                      data-ocid="study_hours.add_button"
+                      onClick={addStudyMinutes}
+                      className="h-8 px-3 rounded-xl text-xs"
+                      style={{
+                        background: "oklch(0.5 0.18 225)",
+                        color: "white",
+                      }}
+                    >
+                      + Add
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Today's 3 Wins */}
+                <div
+                  data-ocid="wins.card"
+                  className="rounded-2xl p-5"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, oklch(0.97 0.03 55), oklch(0.94 0.04 45))",
+                    border: "1px solid oklch(0.86 0.05 55 / 0.5)",
+                  }}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <Trophy
+                      className="w-5 h-5"
+                      style={{ color: "oklch(0.58 0.2 55)" }}
+                    />
+                    <span
+                      className="font-display font-semibold text-base"
+                      style={{ color: "oklch(0.38 0.14 55)" }}
+                    >
+                      Today&apos;s 3 Wins
+                    </span>
+                  </div>
+                  <div className="space-y-2.5">
+                    {wins.map((win, i) => (
+                      <div
+                        key={`win-${win.label}-${i}`}
+                        data-ocid={`wins.item.${i + 1}`}
+                        className="flex items-center gap-3"
+                      >
+                        <Checkbox
+                          data-ocid={`wins.checkbox.${i + 1}`}
+                          checked={win.done}
+                          onCheckedChange={() =>
+                            saveWins(
+                              wins.map((w, idx) =>
+                                idx === i ? { ...w, done: !w.done } : w,
+                              ),
+                            )
+                          }
+                          id={`win-${i}`}
+                        />
+                        {editingWinIdx === i ? (
+                          <div className="flex gap-1.5 flex-1">
+                            <Input
+                              value={editingWinLabel}
+                              onChange={(e) =>
+                                setEditingWinLabel(e.target.value)
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  saveWins(
+                                    wins.map((w, idx) =>
+                                      idx === i
+                                        ? {
+                                            ...w,
+                                            label:
+                                              editingWinLabel.trim() || w.label,
+                                          }
+                                        : w,
+                                    ),
+                                  );
+                                  setEditingWinIdx(null);
+                                }
+                                if (e.key === "Escape") setEditingWinIdx(null);
+                              }}
+                              autoFocus
+                              className="flex-1 rounded-lg border-0 h-7 text-sm"
+                              style={{
+                                background: "oklch(0.9 0.03 55 / 0.5)",
+                                color: "oklch(0.3 0.1 55)",
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
                                 saveWins(
                                   wins.map((w, idx) =>
                                     idx === i
@@ -1630,357 +2627,353 @@ function AppContent() {
                                   ),
                                 );
                                 setEditingWinIdx(null);
-                              }
-                              if (e.key === "Escape") setEditingWinIdx(null);
-                            }}
-                            autoFocus
-                            className="flex-1 rounded-lg border-0 h-7 text-sm"
+                              }}
+                              className="px-2 rounded-lg text-xs"
+                              style={{
+                                background: "oklch(0.5 0.16 150)",
+                                color: "white",
+                              }}
+                            >
+                              ✓
+                            </button>
+                          </div>
+                        ) : (
+                          <label
+                            htmlFor={`win-${i}`}
+                            className="flex-1 text-sm cursor-pointer"
                             style={{
-                              background: "oklch(0.9 0.03 55 / 0.5)",
-                              color: "oklch(0.3 0.1 55)",
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              saveWins(
-                                wins.map((w, idx) =>
-                                  idx === i
-                                    ? {
-                                        ...w,
-                                        label:
-                                          editingWinLabel.trim() || w.label,
-                                      }
-                                    : w,
-                                ),
-                              );
-                              setEditingWinIdx(null);
-                            }}
-                            className="px-2 rounded-lg text-xs"
-                            style={{
-                              background: "oklch(0.5 0.16 150)",
-                              color: "white",
+                              color: win.done
+                                ? "oklch(0.62 0.1 55)"
+                                : "oklch(0.35 0.1 55)",
+                              textDecoration: win.done
+                                ? "line-through"
+                                : "none",
                             }}
                           >
-                            ✓
-                          </button>
-                        </div>
-                      ) : (
-                        <label
-                          htmlFor={`win-${i}`}
-                          className="flex-1 text-sm cursor-pointer"
-                          style={{
-                            color: win.done
-                              ? "oklch(0.62 0.1 55)"
-                              : "oklch(0.35 0.1 55)",
-                            textDecoration: win.done ? "line-through" : "none",
+                            {win.label}
+                          </label>
+                        )}
+                        <button
+                          type="button"
+                          data-ocid={`wins.edit_button.${i + 1}`}
+                          onClick={() => {
+                            setEditingWinIdx(i);
+                            setEditingWinLabel(win.label);
                           }}
+                          className="p-1 rounded opacity-60 hover:opacity-100"
+                          style={{ color: "oklch(0.55 0.12 55)" }}
                         >
-                          {win.label}
-                        </label>
-                      )}
-                      <button
-                        type="button"
-                        data-ocid={`wins.edit_button.${i + 1}`}
-                        onClick={() => {
-                          setEditingWinIdx(i);
-                          setEditingWinLabel(win.label);
-                        }}
-                        className="p-1 rounded opacity-60 hover:opacity-100"
-                        style={{ color: "oklch(0.55 0.12 55)" }}
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+          {/* ──────────────── RIYALAH STREAK CARD ──────────────── */}
+          {!focusMode && viewMode === "dashboard" && (
+            <div
+              data-ocid="riyalah_streak.card"
+              className="rounded-2xl p-5 mb-6"
+              style={{
+                background:
+                  "linear-gradient(135deg, oklch(0.22 0.1 285 / 0.95), oklch(0.18 0.08 295 / 0.95))",
+                border: "1px solid oklch(0.4 0.1 285 / 0.3)",
+              }}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <div
+                    className="font-display text-lg font-bold mb-1"
+                    style={{ color: "oklch(0.88 0.1 80)" }}
+                  >
+                    🔥 Riyalah Streak
+                  </div>
+                  <div className="flex gap-6">
+                    <div>
+                      <div
+                        className="font-display text-3xl font-bold"
+                        style={{ color: "oklch(0.88 0.18 70)" }}
                       >
-                        <Pencil className="w-3 h-3" />
-                      </button>
+                        {riyalahStreak}
+                      </div>
+                      <div
+                        className="text-xs"
+                        style={{ color: "oklch(0.6 0.08 285)" }}
+                      >
+                        Current streak
+                      </div>
                     </div>
-                  ))}
+                    <div>
+                      <div
+                        className="font-display text-3xl font-bold"
+                        style={{ color: "oklch(0.78 0.14 80)" }}
+                      >
+                        {riyalahLongest}
+                      </div>
+                      <div
+                        className="text-xs"
+                        style={{ color: "oklch(0.6 0.08 285)" }}
+                      >
+                        Longest streak
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    data-ocid="riyalah_streak.increment_button"
+                    onClick={handleMarkStreakToday}
+                    className="rounded-xl text-sm"
+                    style={{
+                      background: "oklch(0.55 0.22 55 / 0.3)",
+                      color: "oklch(0.88 0.18 70)",
+                      border: "1px solid oklch(0.65 0.2 60 / 0.4)",
+                    }}
+                  >
+                    🔥 Mark Today
+                  </Button>
+                  <Button
+                    data-ocid="riyalah_streak.reset_button"
+                    onClick={() => {
+                      setRiyalahStreak(0);
+                      localStorage.setItem("riyalah_streak", "0");
+                      toast.info("Streak reset.");
+                    }}
+                    variant="outline"
+                    className="rounded-xl text-sm"
+                    style={{
+                      border: "1px solid oklch(0.4 0.1 285 / 0.4)",
+                      color: "oklch(0.6 0.1 285)",
+                    }}
+                  >
+                    Reset
+                  </Button>
                 </div>
               </div>
             </div>
           )}
 
-        {/* ──────────────── RIYALAH STREAK CARD ──────────────── */}
-        {!focusMode && viewMode === "dashboard" && (
-          <div
-            data-ocid="riyalah_streak.card"
-            className="rounded-2xl p-5 mb-6"
-            style={{
-              background:
-                "linear-gradient(135deg, oklch(0.22 0.1 285 / 0.95), oklch(0.18 0.08 295 / 0.95))",
-              border: "1px solid oklch(0.4 0.1 285 / 0.3)",
-            }}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <div
-                  className="font-display text-lg font-bold mb-1"
-                  style={{ color: "oklch(0.88 0.1 80)" }}
-                >
-                  🔥 Riyalah Streak
-                </div>
-                <div className="flex gap-6">
-                  <div>
-                    <div
-                      className="font-display text-3xl font-bold"
-                      style={{ color: "oklch(0.88 0.18 70)" }}
-                    >
-                      {riyalahStreak}
-                    </div>
-                    <div
-                      className="text-xs"
-                      style={{ color: "oklch(0.6 0.08 285)" }}
-                    >
-                      Current streak
-                    </div>
-                  </div>
-                  <div>
-                    <div
-                      className="font-display text-3xl font-bold"
-                      style={{ color: "oklch(0.78 0.14 80)" }}
-                    >
-                      {riyalahLongest}
-                    </div>
-                    <div
-                      className="text-xs"
-                      style={{ color: "oklch(0.6 0.08 285)" }}
-                    >
-                      Longest streak
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  data-ocid="riyalah_streak.increment_button"
-                  onClick={handleMarkStreakToday}
-                  className="rounded-xl text-sm"
-                  style={{
-                    background: "oklch(0.55 0.22 55 / 0.3)",
-                    color: "oklch(0.88 0.18 70)",
-                    border: "1px solid oklch(0.65 0.2 60 / 0.4)",
-                  }}
-                >
-                  🔥 Mark Today
-                </Button>
-                <Button
-                  data-ocid="riyalah_streak.reset_button"
-                  onClick={() => {
-                    setRiyalahStreak(0);
-                    localStorage.setItem("riyalah_streak", "0");
-                    toast.info("Streak reset.");
-                  }}
-                  variant="outline"
-                  className="rounded-xl text-sm"
-                  style={{
-                    border: "1px solid oklch(0.4 0.1 285 / 0.4)",
-                    color: "oklch(0.6 0.1 285)",
-                  }}
-                >
-                  Reset
-                </Button>
-              </div>
+          {viewMode === "deepwork" && !focusMode && (
+            <div
+              data-ocid="deepwork.banner"
+              className="mb-4 p-3 rounded-xl text-center text-sm font-semibold"
+              style={{
+                background: "oklch(0.5 0.18 225 / 0.1)",
+                color: "oklch(0.42 0.15 225)",
+                border: "1px solid oklch(0.6 0.15 225 / 0.2)",
+              }}
+            >
+              📚 Deep Work Mode — Study + Timer only
             </div>
-          </div>
-        )}
-
-        {viewMode === "deepwork" && !focusMode && (
-          <div
-            data-ocid="deepwork.banner"
-            className="mb-4 p-3 rounded-xl text-center text-sm font-semibold"
-            style={{
-              background: "oklch(0.5 0.18 225 / 0.1)",
-              color: "oklch(0.42 0.15 225)",
-              border: "1px solid oklch(0.6 0.15 225 / 0.2)",
-            }}
+          )}
+          <Tabs
+            defaultValue={viewMode === "deepwork" ? "daily" : "spiritual"}
+            className="space-y-6"
           >
-            📚 Deep Work Mode — Study + Timer only
-          </div>
-        )}
-        <Tabs
-          defaultValue={viewMode === "deepwork" ? "daily" : "spiritual"}
-          className="space-y-6"
-        >
-          <TabsList
-            className="grid grid-cols-4 gap-1 p-1 h-auto rounded-2xl"
-            style={{
-              background: "oklch(0.92 0.018 75 / 0.8)",
-              backdropFilter: "blur(12px)",
-              border: "1px solid oklch(0.86 0.02 75 / 0.7)",
-            }}
-          >
-            <TabsTrigger
-              value="spiritual"
-              data-ocid="nav.spiritual.tab"
-              className="flex items-center gap-1.5 py-2.5 rounded-xl font-medium text-sm transition-all data-[state=active]:shadow-md"
-              style={
-                {
-                  "--tab-active-bg":
-                    "linear-gradient(135deg, oklch(0.3 0.14 285), oklch(0.25 0.1 295))",
-                } as React.CSSProperties
-              }
+            <TabsList
+              className="grid grid-cols-5 gap-1 p-1 h-auto rounded-2xl"
+              style={{
+                background: "oklch(0.92 0.018 75 / 0.8)",
+                backdropFilter: "blur(12px)",
+                border: "1px solid oklch(0.86 0.02 75 / 0.7)",
+              }}
             >
-              <Moon className="w-4 h-4" />
-              <span className="hidden sm:inline">Spiritual</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="academics"
-              data-ocid="nav.academics.tab"
-              className="flex items-center gap-1.5 py-2.5 rounded-xl font-medium text-sm transition-all"
-            >
-              <BookOpen className="w-4 h-4" />
-              <span className="hidden sm:inline">Academics</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="career"
-              data-ocid="nav.career.tab"
-              className="flex items-center gap-1.5 py-2.5 rounded-xl font-medium text-sm transition-all"
-            >
-              <Briefcase className="w-4 h-4" />
-              <span className="hidden sm:inline">Career</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="daily"
-              data-ocid="nav.daily.tab"
-              className="flex items-center gap-1.5 py-2.5 rounded-xl font-medium text-sm transition-all"
-            >
-              <CalendarDays className="w-4 h-4" />
-              <span className="hidden sm:inline">Daily</span>
-            </TabsTrigger>
-          </TabsList>
-
-          {/* ──────────────── SPIRITUAL TAB ──────────────── */}
-          <TabsContent value="spiritual" className="space-y-6 mt-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.4 }}
-              className="grid gap-6 md:grid-cols-[1fr_280px]"
-            >
-              {/* Checklist card */}
-              <div
-                className="rounded-2xl p-6 space-y-4"
-                style={{
-                  background:
-                    "linear-gradient(145deg, oklch(0.18 0.1 285 / 0.96), oklch(0.15 0.08 295 / 0.96))",
-                  backdropFilter: "blur(16px)",
-                  boxShadow:
-                    "0 8px 32px oklch(0.12 0.1 285 / 0.5), 0 0 0 1px oklch(0.35 0.1 285 / 0.3), inset 0 1px 0 oklch(0.5 0.12 80 / 0.1)",
-                }}
+              <TabsTrigger
+                value="spiritual"
+                data-ocid="nav.spiritual.tab"
+                className="flex items-center gap-1.5 py-2.5 rounded-xl font-medium text-sm transition-all data-[state=active]:shadow-md"
+                style={
+                  {
+                    "--tab-active-bg":
+                      "linear-gradient(135deg, oklch(0.3 0.14 285), oklch(0.25 0.1 295))",
+                  } as React.CSSProperties
+                }
               >
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div>
-                    <h2
-                      className="font-display text-xl font-bold"
-                      style={{ color: "oklch(0.92 0.1 80)" }}
-                    >
-                      🌙 Daily Riyalah
-                    </h2>
-                    <p
-                      className="text-sm mt-0.5"
-                      style={{ color: "oklch(0.6 0.08 285)" }}
-                    >
-                      Spiritual practices for today
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge
-                      className="text-sm px-3 py-1.5 rounded-full font-bold"
-                      style={{
-                        background:
-                          riyalahStreak > 0
-                            ? "oklch(0.55 0.22 55 / 0.3)"
-                            : "oklch(0.42 0.22 285 / 0.3)",
-                        color:
-                          riyalahStreak > 0
-                            ? "oklch(0.88 0.18 70)"
-                            : "oklch(0.75 0.12 285)",
-                        border: `1px solid ${riyalahStreak > 0 ? "oklch(0.65 0.2 60 / 0.4)" : "oklch(0.5 0.15 80 / 0.3)"}`,
-                      }}
-                    >
-                      {riyalahStreak > 0
-                        ? `🔥 ${riyalahStreak} day streak`
-                        : "✨ Start your streak!"}
-                    </Badge>
-                    <Badge
-                      className="text-sm px-3 py-1 rounded-full font-semibold"
-                      style={{
-                        background: "oklch(0.42 0.22 285 / 0.3)",
-                        color: "oklch(0.85 0.14 80)",
-                        border: "1px solid oklch(0.5 0.15 80 / 0.3)",
-                      }}
-                    >
-                      {checkedItems.riyalah.length} / {riyalah.length}
-                    </Badge>
-                  </div>
-                </div>
-                <Button
-                  data-ocid="riyalah.streak_button"
-                  onClick={handleMarkStreakToday}
-                  className="w-full rounded-xl font-semibold text-sm"
+                <Moon className="w-4 h-4" />
+                <span className="hidden sm:inline">Spiritual</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="academics"
+                data-ocid="nav.academics.tab"
+                className="flex items-center gap-1.5 py-2.5 rounded-xl font-medium text-sm transition-all"
+              >
+                <BookOpen className="w-4 h-4" />
+                <span className="hidden sm:inline">Academics</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="career"
+                data-ocid="nav.career.tab"
+                className="flex items-center gap-1.5 py-2.5 rounded-xl font-medium text-sm transition-all"
+              >
+                <Briefcase className="w-4 h-4" />
+                <span className="hidden sm:inline">Career</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="daily"
+                data-ocid="nav.daily.tab"
+                className="flex items-center gap-1.5 py-2.5 rounded-xl font-medium text-sm transition-all"
+              >
+                <CalendarDays className="w-4 h-4" />
+                <span className="hidden sm:inline">Daily</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="cycle"
+                data-ocid="nav.cycle.tab"
+                className="flex items-center gap-1.5 py-2.5 rounded-xl font-medium text-sm transition-all"
+              >
+                <span className="text-base">🌸</span>
+                <span className="hidden sm:inline">Cycle</span>
+              </TabsTrigger>
+            </TabsList>
+
+            {/* ──────────────── SPIRITUAL TAB ──────────────── */}
+            <TabsContent value="spiritual" className="space-y-6 mt-6">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4 }}
+                className="grid gap-6 md:grid-cols-[1fr_280px]"
+              >
+                {/* Checklist card */}
+                <div
+                  className="rounded-2xl p-6 space-y-4"
                   style={{
-                    background: "oklch(0.42 0.22 285 / 0.4)",
-                    color: "oklch(0.9 0.12 80)",
-                    border: "1px solid oklch(0.55 0.15 80 / 0.35)",
+                    background:
+                      "linear-gradient(145deg, oklch(0.18 0.1 285 / 0.96), oklch(0.15 0.08 295 / 0.96))",
+                    backdropFilter: "blur(16px)",
+                    boxShadow:
+                      "0 8px 32px oklch(0.12 0.1 285 / 0.5), 0 0 0 1px oklch(0.35 0.1 285 / 0.3), inset 0 1px 0 oklch(0.5 0.12 80 / 0.1)",
                   }}
                 >
-                  🔥 Mark Today Complete
-                </Button>
-
-                <div className="space-y-2.5">
-                  {spiritualChecklistItems.map(({ label, emoji }, i) => {
-                    const checked = checkedItems.riyalah.includes(label);
-                    const isEditing =
-                      editingItem?.section === "riyalah" &&
-                      editingItem.index === i;
-                    return (
-                      <motion.div
-                        key={label}
-                        initial={{ opacity: 0, y: 16 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{
-                          delay: i * 0.07,
-                          duration: 0.4,
-                          ease: "easeOut",
-                        }}
-                        className="group"
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                      <h2
+                        className="font-display text-xl font-bold"
+                        style={{ color: "oklch(0.92 0.1 80)" }}
                       >
-                        <label
-                          htmlFor={isEditing ? undefined : `riyalah-${i}`}
-                          className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all"
-                          style={{
-                            background: checked
-                              ? "oklch(0.42 0.22 285 / 0.25)"
-                              : "oklch(0.28 0.08 285 / 0.3)",
-                            border: `1px solid ${checked ? "oklch(0.55 0.18 80 / 0.4)" : "oklch(0.38 0.08 285 / 0.3)"}`,
+                        🌙 Daily Riyalah
+                      </h2>
+                      <p
+                        className="text-sm mt-0.5"
+                        style={{ color: "oklch(0.6 0.08 285)" }}
+                      >
+                        Spiritual practices for today
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge
+                        className="text-sm px-3 py-1.5 rounded-full font-bold"
+                        style={{
+                          background:
+                            riyalahStreak > 0
+                              ? "oklch(0.55 0.22 55 / 0.3)"
+                              : "oklch(0.42 0.22 285 / 0.3)",
+                          color:
+                            riyalahStreak > 0
+                              ? "oklch(0.88 0.18 70)"
+                              : "oklch(0.75 0.12 285)",
+                          border: `1px solid ${riyalahStreak > 0 ? "oklch(0.65 0.2 60 / 0.4)" : "oklch(0.5 0.15 80 / 0.3)"}`,
+                        }}
+                      >
+                        {riyalahStreak > 0
+                          ? `🔥 ${riyalahStreak} day streak`
+                          : "✨ Start your streak!"}
+                      </Badge>
+                      <Badge
+                        className="text-sm px-3 py-1 rounded-full font-semibold"
+                        style={{
+                          background: "oklch(0.42 0.22 285 / 0.3)",
+                          color: "oklch(0.85 0.14 80)",
+                          border: "1px solid oklch(0.5 0.15 80 / 0.3)",
+                        }}
+                      >
+                        {checkedItems.riyalah.length} / {riyalah.length}
+                      </Badge>
+                    </div>
+                  </div>
+                  <Button
+                    data-ocid="riyalah.streak_button"
+                    onClick={handleMarkStreakToday}
+                    className="w-full rounded-xl font-semibold text-sm"
+                    style={{
+                      background: "oklch(0.42 0.22 285 / 0.4)",
+                      color: "oklch(0.9 0.12 80)",
+                      border: "1px solid oklch(0.55 0.15 80 / 0.35)",
+                    }}
+                  >
+                    🔥 Mark Today Complete
+                  </Button>
+
+                  <div className="space-y-2.5">
+                    {spiritualChecklistItems.map(({ label, emoji }, i) => {
+                      const checked = checkedItems.riyalah.includes(label);
+                      const isEditing =
+                        editingItem?.section === "riyalah" &&
+                        editingItem.index === i;
+                      return (
+                        <motion.div
+                          key={label}
+                          initial={{ opacity: 0, y: 16 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{
+                            delay: i * 0.07,
+                            duration: 0.4,
+                            ease: "easeOut",
                           }}
+                          className="group"
                         >
-                          <Checkbox
-                            id={`riyalah-${i}`}
-                            data-ocid={`spiritual.checkbox.${i + 1}`}
-                            checked={checked}
-                            onCheckedChange={() =>
-                              toggleCheck("riyalah", label)
-                            }
-                            className="border-2"
+                          <label
+                            htmlFor={isEditing ? undefined : `riyalah-${i}`}
+                            className="flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all"
                             style={{
-                              borderColor: checked
-                                ? "oklch(0.75 0.16 80)"
-                                : "oklch(0.45 0.1 285)",
+                              background: checked
+                                ? "oklch(0.42 0.22 285 / 0.25)"
+                                : "oklch(0.28 0.08 285 / 0.3)",
+                              border: `1px solid ${checked ? "oklch(0.55 0.18 80 / 0.4)" : "oklch(0.38 0.08 285 / 0.3)"}`,
                             }}
-                          />
-                          <span className="text-lg">{emoji}</span>
-                          {isEditing ? (
-                            <Input
-                              data-ocid={`spiritual.item.input.${i + 1}`}
-                              autoFocus
-                              value={editingItem.value}
-                              onChange={(e) =>
-                                setEditingItem({
-                                  ...editingItem,
-                                  value: e.target.value,
-                                })
+                          >
+                            <Checkbox
+                              id={`riyalah-${i}`}
+                              data-ocid={`spiritual.checkbox.${i + 1}`}
+                              checked={checked}
+                              onCheckedChange={() =>
+                                toggleCheck("riyalah", label)
                               }
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter")
+                              className="border-2"
+                              style={{
+                                borderColor: checked
+                                  ? "oklch(0.75 0.16 80)"
+                                  : "oklch(0.45 0.1 285)",
+                              }}
+                            />
+                            <span className="text-lg">{emoji}</span>
+                            {isEditing ? (
+                              <Input
+                                data-ocid={`spiritual.item.input.${i + 1}`}
+                                autoFocus
+                                value={editingItem.value}
+                                onChange={(e) =>
+                                  setEditingItem({
+                                    ...editingItem,
+                                    value: e.target.value,
+                                  })
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter")
+                                    renameItem(
+                                      "riyalah",
+                                      i,
+                                      editingItem.value,
+                                      setRiyalah,
+                                      "riyalah",
+                                      label,
+                                    );
+                                  if (e.key === "Escape") setEditingItem(null);
+                                }}
+                                onBlur={() =>
                                   renameItem(
                                     "riyalah",
                                     i,
@@ -1988,244 +2981,246 @@ function AppContent() {
                                     setRiyalah,
                                     "riyalah",
                                     label,
+                                  )
+                                }
+                                className="h-7 text-sm flex-1 bg-transparent border-b border-t-0 border-l-0 border-r-0 rounded-none focus-visible:ring-0 px-1"
+                                style={{ color: "oklch(0.85 0.14 80)" }}
+                                onClick={(e) => e.preventDefault()}
+                              />
+                            ) : (
+                              <span
+                                className="font-medium flex-1"
+                                style={{
+                                  color: checked
+                                    ? "oklch(0.85 0.14 80)"
+                                    : "oklch(0.78 0.06 285)",
+                                  textDecoration: checked
+                                    ? "line-through"
+                                    : "none",
+                                  opacity: checked ? 0.75 : 1,
+                                }}
+                              >
+                                {label}
+                              </span>
+                            )}
+                            {!isEditing && (
+                              <button
+                                type="button"
+                                data-ocid={`spiritual.item.edit_button.${i + 1}`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setEditingItem({
+                                    section: "riyalah",
+                                    index: i,
+                                    value: label,
+                                  });
+                                }}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto p-1 rounded"
+                                style={{ color: "oklch(0.58 0.08 285)" }}
+                              >
+                                <Pencil size={14} />
+                              </button>
+                            )}
+                            {!isEditing && checked && (
+                              <span
+                                className="text-sm"
+                                style={{ color: "oklch(0.75 0.16 80)" }}
+                              >
+                                ✓
+                              </span>
+                            )}
+                          </label>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Ring progress */}
+                <div
+                  className="rounded-2xl p-6 flex flex-col items-center justify-center gap-6"
+                  style={{
+                    background:
+                      "linear-gradient(145deg, oklch(0.2 0.09 285 / 0.95), oklch(0.16 0.07 295 / 0.95))",
+                    backdropFilter: "blur(16px)",
+                    boxShadow:
+                      "0 8px 32px oklch(0.12 0.1 285 / 0.5), 0 0 0 1px oklch(0.35 0.1 285 / 0.3)",
+                  }}
+                >
+                  <CircularRing
+                    value={riyalahPct}
+                    size={160}
+                    strokeWidth={14}
+                    label="Today's Progress"
+                    sublabel={`${checkedItems.riyalah.length} of ${riyalah.length} done`}
+                  />
+
+                  <div className="w-full space-y-2">
+                    <div
+                      className="text-center text-sm font-medium py-2 px-4 rounded-xl"
+                      style={{
+                        background: "oklch(0.28 0.1 285 / 0.5)",
+                        color: "oklch(0.7 0.1 285)",
+                      }}
+                    >
+                      {riyalahPct === 100
+                        ? "🌟 All practices complete! Masha'Allah!"
+                        : riyalahPct >= 50
+                          ? "💪 Keep going, you're halfway there!"
+                          : "🌙 Begin your spiritual journey for today"}
+                    </div>
+                  </div>
+
+                  <div
+                    className="w-full p-3 rounded-xl text-center"
+                    style={{
+                      background: "oklch(0.25 0.08 285 / 0.4)",
+                      border: "1px solid oklch(0.38 0.1 285 / 0.3)",
+                    }}
+                  >
+                    <p
+                      className="text-xs"
+                      style={{ color: "oklch(0.58 0.08 285)" }}
+                    >
+                      Daily Reminder
+                    </p>
+                    <p
+                      className="text-sm mt-1 italic"
+                      style={{ color: "oklch(0.75 0.1 80)" }}
+                    >
+                      "Indeed, prayer has been decreed upon the believers a
+                      decree of specified times."
+                    </p>
+                    <p
+                      className="text-xs mt-1"
+                      style={{ color: "oklch(0.52 0.07 285)" }}
+                    >
+                      — Quran 4:103
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            </TabsContent>
+
+            {/* ──────────────── ACADEMICS TAB ──────────────── */}
+            <TabsContent value="academics" className="space-y-5 mt-6">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4 }}
+                className="grid gap-5 md:grid-cols-2"
+              >
+                {/* MA Books */}
+                <Card className="card-journal rounded-2xl border-0">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle
+                        className="font-display text-xl"
+                        style={{ color: "oklch(0.32 0.12 155)" }}
+                      >
+                        📚 MA Books
+                      </CardTitle>
+                      <Badge
+                        className="rounded-full text-xs px-2.5"
+                        style={{
+                          background: "oklch(0.42 0.14 155 / 0.12)",
+                          color: "oklch(0.38 0.12 155)",
+                          border: "1px solid oklch(0.55 0.12 155 / 0.25)",
+                        }}
+                      >
+                        {checkedItems.mABooks.length}/{maBooks.length}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 academics-progress space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span
+                          className="text-xs"
+                          style={{ color: "oklch(0.52 0.1 155)" }}
+                        >
+                          {checkedItems.mABooks.length} of {maBooks.length}{" "}
+                          books read
+                        </span>
+                        <span
+                          className="text-sm font-bold"
+                          style={{ color: "oklch(0.38 0.14 155)" }}
+                        >
+                          {pct(checkedItems.mABooks.length, maBooks.length)}%
+                        </span>
+                      </div>
+                      <Progress
+                        value={pct(checkedItems.mABooks.length, maBooks.length)}
+                        className="h-3 rounded-full"
+                        style={{ background: "oklch(0.88 0.025 155 / 0.4)" }}
+                      />
+                      <p
+                        className="text-xs"
+                        style={{ color: "oklch(0.6 0.08 155)" }}
+                      >
+                        {pct(checkedItems.mABooks.length, maBooks.length) ===
+                        100
+                          ? "🎉 All books complete!"
+                          : pct(checkedItems.mABooks.length, maBooks.length) >=
+                              50
+                            ? "📖 Over halfway there!"
+                            : "📚 Keep reading!"}
+                      </p>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-1.5">
+                    {maBooks.map((book, i) => {
+                      const checked = checkedItems.mABooks.includes(book);
+                      const isEditing =
+                        editingItem?.section === "maBooks" &&
+                        editingItem.index === i;
+                      return (
+                        <motion.div
+                          key={`mabook-${book}`}
+                          initial={{ opacity: 0, y: 16 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{
+                            delay: i * 0.07,
+                            duration: 0.4,
+                            ease: "easeOut",
+                          }}
+                          className="group flex items-start gap-3 p-2.5 rounded-lg transition-colors"
+                          style={{
+                            background: checked
+                              ? "oklch(0.42 0.14 155 / 0.08)"
+                              : "transparent",
+                          }}
+                        >
+                          <Checkbox
+                            id={`mabook-${i}`}
+                            data-ocid={`academics.mabooks.checkbox.${i + 1}`}
+                            checked={checked}
+                            onCheckedChange={() => toggleCheck("mABooks", book)}
+                            className="mt-0.5"
+                            style={{ accentColor: "oklch(0.42 0.14 155)" }}
+                          />
+                          {isEditing ? (
+                            <Input
+                              data-ocid={`mabooks.item.input.${i + 1}`}
+                              autoFocus
+                              value={editingItem.value}
+                              onChange={(e) =>
+                                setEditingItem({
+                                  ...editingItem,
+                                  value: e.target.value,
+                                })
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter")
+                                  renameItem(
+                                    "maBooks",
+                                    i,
+                                    editingItem.value,
+                                    setMaBooks,
+                                    "mABooks",
+                                    book,
                                   );
                                 if (e.key === "Escape") setEditingItem(null);
                               }}
                               onBlur={() =>
-                                renameItem(
-                                  "riyalah",
-                                  i,
-                                  editingItem.value,
-                                  setRiyalah,
-                                  "riyalah",
-                                  label,
-                                )
-                              }
-                              className="h-7 text-sm flex-1 bg-transparent border-b border-t-0 border-l-0 border-r-0 rounded-none focus-visible:ring-0 px-1"
-                              style={{ color: "oklch(0.85 0.14 80)" }}
-                              onClick={(e) => e.preventDefault()}
-                            />
-                          ) : (
-                            <span
-                              className="font-medium flex-1"
-                              style={{
-                                color: checked
-                                  ? "oklch(0.85 0.14 80)"
-                                  : "oklch(0.78 0.06 285)",
-                                textDecoration: checked
-                                  ? "line-through"
-                                  : "none",
-                                opacity: checked ? 0.75 : 1,
-                              }}
-                            >
-                              {label}
-                            </span>
-                          )}
-                          {!isEditing && (
-                            <button
-                              type="button"
-                              data-ocid={`spiritual.item.edit_button.${i + 1}`}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                setEditingItem({
-                                  section: "riyalah",
-                                  index: i,
-                                  value: label,
-                                });
-                              }}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto p-1 rounded"
-                              style={{ color: "oklch(0.58 0.08 285)" }}
-                            >
-                              <Pencil size={14} />
-                            </button>
-                          )}
-                          {!isEditing && checked && (
-                            <span
-                              className="text-sm"
-                              style={{ color: "oklch(0.75 0.16 80)" }}
-                            >
-                              ✓
-                            </span>
-                          )}
-                        </label>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Ring progress */}
-              <div
-                className="rounded-2xl p-6 flex flex-col items-center justify-center gap-6"
-                style={{
-                  background:
-                    "linear-gradient(145deg, oklch(0.2 0.09 285 / 0.95), oklch(0.16 0.07 295 / 0.95))",
-                  backdropFilter: "blur(16px)",
-                  boxShadow:
-                    "0 8px 32px oklch(0.12 0.1 285 / 0.5), 0 0 0 1px oklch(0.35 0.1 285 / 0.3)",
-                }}
-              >
-                <CircularRing
-                  value={riyalahPct}
-                  size={160}
-                  strokeWidth={14}
-                  label="Today's Progress"
-                  sublabel={`${checkedItems.riyalah.length} of ${riyalah.length} done`}
-                />
-
-                <div className="w-full space-y-2">
-                  <div
-                    className="text-center text-sm font-medium py-2 px-4 rounded-xl"
-                    style={{
-                      background: "oklch(0.28 0.1 285 / 0.5)",
-                      color: "oklch(0.7 0.1 285)",
-                    }}
-                  >
-                    {riyalahPct === 100
-                      ? "🌟 All practices complete! Masha'Allah!"
-                      : riyalahPct >= 50
-                        ? "💪 Keep going, you're halfway there!"
-                        : "🌙 Begin your spiritual journey for today"}
-                  </div>
-                </div>
-
-                <div
-                  className="w-full p-3 rounded-xl text-center"
-                  style={{
-                    background: "oklch(0.25 0.08 285 / 0.4)",
-                    border: "1px solid oklch(0.38 0.1 285 / 0.3)",
-                  }}
-                >
-                  <p
-                    className="text-xs"
-                    style={{ color: "oklch(0.58 0.08 285)" }}
-                  >
-                    Daily Reminder
-                  </p>
-                  <p
-                    className="text-sm mt-1 italic"
-                    style={{ color: "oklch(0.75 0.1 80)" }}
-                  >
-                    "Indeed, prayer has been decreed upon the believers a decree
-                    of specified times."
-                  </p>
-                  <p
-                    className="text-xs mt-1"
-                    style={{ color: "oklch(0.52 0.07 285)" }}
-                  >
-                    — Quran 4:103
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-          </TabsContent>
-
-          {/* ──────────────── ACADEMICS TAB ──────────────── */}
-          <TabsContent value="academics" className="space-y-5 mt-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.4 }}
-              className="grid gap-5 md:grid-cols-2"
-            >
-              {/* MA Books */}
-              <Card className="card-journal rounded-2xl border-0">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle
-                      className="font-display text-xl"
-                      style={{ color: "oklch(0.32 0.12 155)" }}
-                    >
-                      📚 MA Books
-                    </CardTitle>
-                    <Badge
-                      className="rounded-full text-xs px-2.5"
-                      style={{
-                        background: "oklch(0.42 0.14 155 / 0.12)",
-                        color: "oklch(0.38 0.12 155)",
-                        border: "1px solid oklch(0.55 0.12 155 / 0.25)",
-                      }}
-                    >
-                      {checkedItems.mABooks.length}/{maBooks.length}
-                    </Badge>
-                  </div>
-                  <div className="mt-3 academics-progress space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span
-                        className="text-xs"
-                        style={{ color: "oklch(0.52 0.1 155)" }}
-                      >
-                        {checkedItems.mABooks.length} of {maBooks.length} books
-                        read
-                      </span>
-                      <span
-                        className="text-sm font-bold"
-                        style={{ color: "oklch(0.38 0.14 155)" }}
-                      >
-                        {pct(checkedItems.mABooks.length, maBooks.length)}%
-                      </span>
-                    </div>
-                    <Progress
-                      value={pct(checkedItems.mABooks.length, maBooks.length)}
-                      className="h-3 rounded-full"
-                      style={{ background: "oklch(0.88 0.025 155 / 0.4)" }}
-                    />
-                    <p
-                      className="text-xs"
-                      style={{ color: "oklch(0.6 0.08 155)" }}
-                    >
-                      {pct(checkedItems.mABooks.length, maBooks.length) === 100
-                        ? "🎉 All books complete!"
-                        : pct(checkedItems.mABooks.length, maBooks.length) >= 50
-                          ? "📖 Over halfway there!"
-                          : "📚 Keep reading!"}
-                    </p>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-1.5">
-                  {maBooks.map((book, i) => {
-                    const checked = checkedItems.mABooks.includes(book);
-                    const isEditing =
-                      editingItem?.section === "maBooks" &&
-                      editingItem.index === i;
-                    return (
-                      <motion.div
-                        key={`mabook-${book}`}
-                        initial={{ opacity: 0, y: 16 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{
-                          delay: i * 0.07,
-                          duration: 0.4,
-                          ease: "easeOut",
-                        }}
-                        className="group flex items-start gap-3 p-2.5 rounded-lg transition-colors"
-                        style={{
-                          background: checked
-                            ? "oklch(0.42 0.14 155 / 0.08)"
-                            : "transparent",
-                        }}
-                      >
-                        <Checkbox
-                          id={`mabook-${i}`}
-                          data-ocid={`academics.mabooks.checkbox.${i + 1}`}
-                          checked={checked}
-                          onCheckedChange={() => toggleCheck("mABooks", book)}
-                          className="mt-0.5"
-                          style={{ accentColor: "oklch(0.42 0.14 155)" }}
-                        />
-                        {isEditing ? (
-                          <Input
-                            data-ocid={`mabooks.item.input.${i + 1}`}
-                            autoFocus
-                            value={editingItem.value}
-                            onChange={(e) =>
-                              setEditingItem({
-                                ...editingItem,
-                                value: e.target.value,
-                              })
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter")
                                 renameItem(
                                   "maBooks",
                                   i,
@@ -2233,130 +3228,134 @@ function AppContent() {
                                   setMaBooks,
                                   "mABooks",
                                   book,
-                                );
-                              if (e.key === "Escape") setEditingItem(null);
-                            }}
-                            onBlur={() =>
-                              renameItem(
-                                "maBooks",
-                                i,
-                                editingItem.value,
-                                setMaBooks,
-                                "mABooks",
-                                book,
-                              )
-                            }
-                            className="h-7 text-sm flex-1 bg-transparent border-b border-t-0 border-l-0 border-r-0 rounded-none focus-visible:ring-0 px-1"
-                            style={{ color: "oklch(0.28 0.02 75)" }}
-                          />
-                        ) : (
-                          <label
-                            htmlFor={`mabook-${i}`}
-                            className="text-sm leading-snug flex-1 cursor-pointer"
-                            style={{
-                              color: checked
-                                ? "oklch(0.52 0.1 155)"
-                                : "oklch(0.28 0.02 75)",
-                              textDecoration: checked ? "line-through" : "none",
-                              opacity: checked ? 0.65 : 1,
-                            }}
-                          >
-                            {book}
-                          </label>
-                        )}
-                        {!isEditing && (
-                          <button
-                            type="button"
-                            data-ocid={`mabooks.item.edit_button.${i + 1}`}
-                            onClick={() =>
-                              setEditingItem({
-                                section: "maBooks",
-                                index: i,
-                                value: book,
-                              })
-                            }
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded flex-shrink-0"
-                            style={{ color: "oklch(0.55 0.08 155)" }}
-                          >
-                            <Pencil size={14} />
-                          </button>
-                        )}
-                      </motion.div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-
-              <div className="space-y-5">
-                {/* Certificates */}
-                <Card className="card-journal rounded-2xl border-0">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle
-                        className="font-display text-xl"
-                        style={{ color: "oklch(0.32 0.12 155)" }}
-                      >
-                        🎓 Certificates
-                      </CardTitle>
-                      <Badge
-                        className="rounded-full text-xs px-2.5"
-                        style={{
-                          background: "oklch(0.42 0.14 155 / 0.12)",
-                          color: "oklch(0.38 0.12 155)",
-                          border: "1px solid oklch(0.55 0.12 155 / 0.25)",
-                        }}
-                      >
-                        {checkedItems.certificates.length}/{certificates.length}
-                      </Badge>
-                    </div>
-                    <div className="mt-2 academics-progress">
-                      <Progress
-                        value={pct(
-                          checkedItems.certificates.length,
-                          certificates.length,
-                        )}
-                        className="h-2.5 rounded-full"
-                        style={{ background: "oklch(0.88 0.025 155 / 0.4)" }}
-                      />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-1.5">
-                    {certificates.map((cert, i) => {
-                      const checked = checkedItems.certificates.includes(cert);
-                      const isEditing =
-                        editingItem?.section === "certificates" &&
-                        editingItem.index === i;
-                      return (
-                        <div
-                          key={`cert-${cert}`}
-                          className="group flex items-center gap-3 p-2.5 rounded-lg transition-colors"
-                          style={{
-                            background: checked
-                              ? "oklch(0.42 0.14 155 / 0.08)"
-                              : "transparent",
-                          }}
-                        >
-                          <Checkbox
-                            id={`cert-${i}`}
-                            data-ocid={`academics.cert.checkbox.${i + 1}`}
-                            checked={checked}
-                            onCheckedChange={() =>
-                              toggleCheck("certificates", cert)
-                            }
-                          />
-                          {isEditing ? (
-                            <Input
-                              data-ocid={`certificates.item.input.${i + 1}`}
-                              autoFocus
-                              value={editingItem.value}
-                              onChange={(e) =>
+                                )
+                              }
+                              className="h-7 text-sm flex-1 bg-transparent border-b border-t-0 border-l-0 border-r-0 rounded-none focus-visible:ring-0 px-1"
+                              style={{ color: "oklch(0.28 0.02 75)" }}
+                            />
+                          ) : (
+                            <label
+                              htmlFor={`mabook-${i}`}
+                              className="text-sm leading-snug flex-1 cursor-pointer"
+                              style={{
+                                color: checked
+                                  ? "oklch(0.52 0.1 155)"
+                                  : "oklch(0.28 0.02 75)",
+                                textDecoration: checked
+                                  ? "line-through"
+                                  : "none",
+                                opacity: checked ? 0.65 : 1,
+                              }}
+                            >
+                              {book}
+                            </label>
+                          )}
+                          {!isEditing && (
+                            <button
+                              type="button"
+                              data-ocid={`mabooks.item.edit_button.${i + 1}`}
+                              onClick={() =>
                                 setEditingItem({
-                                  ...editingItem,
-                                  value: e.target.value,
+                                  section: "maBooks",
+                                  index: i,
+                                  value: book,
                                 })
                               }
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter")
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded flex-shrink-0"
+                              style={{ color: "oklch(0.55 0.08 155)" }}
+                            >
+                              <Pencil size={14} />
+                            </button>
+                          )}
+                        </motion.div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+
+                <div className="space-y-5">
+                  {/* Certificates */}
+                  <Card className="card-journal rounded-2xl border-0">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle
+                          className="font-display text-xl"
+                          style={{ color: "oklch(0.32 0.12 155)" }}
+                        >
+                          🎓 Certificates
+                        </CardTitle>
+                        <Badge
+                          className="rounded-full text-xs px-2.5"
+                          style={{
+                            background: "oklch(0.42 0.14 155 / 0.12)",
+                            color: "oklch(0.38 0.12 155)",
+                            border: "1px solid oklch(0.55 0.12 155 / 0.25)",
+                          }}
+                        >
+                          {checkedItems.certificates.length}/
+                          {certificates.length}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 academics-progress">
+                        <Progress
+                          value={pct(
+                            checkedItems.certificates.length,
+                            certificates.length,
+                          )}
+                          className="h-2.5 rounded-full"
+                          style={{ background: "oklch(0.88 0.025 155 / 0.4)" }}
+                        />
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-1.5">
+                      {certificates.map((cert, i) => {
+                        const checked =
+                          checkedItems.certificates.includes(cert);
+                        const isEditing =
+                          editingItem?.section === "certificates" &&
+                          editingItem.index === i;
+                        return (
+                          <div
+                            key={`cert-${cert}`}
+                            className="group flex items-center gap-3 p-2.5 rounded-lg transition-colors"
+                            style={{
+                              background: checked
+                                ? "oklch(0.42 0.14 155 / 0.08)"
+                                : "transparent",
+                            }}
+                          >
+                            <Checkbox
+                              id={`cert-${i}`}
+                              data-ocid={`academics.cert.checkbox.${i + 1}`}
+                              checked={checked}
+                              onCheckedChange={() =>
+                                toggleCheck("certificates", cert)
+                              }
+                            />
+                            {isEditing ? (
+                              <Input
+                                data-ocid={`certificates.item.input.${i + 1}`}
+                                autoFocus
+                                value={editingItem.value}
+                                onChange={(e) =>
+                                  setEditingItem({
+                                    ...editingItem,
+                                    value: e.target.value,
+                                  })
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter")
+                                    renameItem(
+                                      "certificates",
+                                      i,
+                                      editingItem.value,
+                                      setCertificates,
+                                      "certificates",
+                                      cert,
+                                    );
+                                  if (e.key === "Escape") setEditingItem(null);
+                                }}
+                                onBlur={() =>
                                   renameItem(
                                     "certificates",
                                     i,
@@ -2364,126 +3363,131 @@ function AppContent() {
                                     setCertificates,
                                     "certificates",
                                     cert,
-                                  );
-                                if (e.key === "Escape") setEditingItem(null);
-                              }}
-                              onBlur={() =>
-                                renameItem(
-                                  "certificates",
-                                  i,
-                                  editingItem.value,
-                                  setCertificates,
-                                  "certificates",
-                                  cert,
-                                )
-                              }
-                              className="h-7 text-sm flex-1 bg-transparent border-b border-t-0 border-l-0 border-r-0 rounded-none focus-visible:ring-0 px-1"
-                              style={{ color: "oklch(0.28 0.02 75)" }}
-                            />
-                          ) : (
-                            <label
-                              htmlFor={`cert-${i}`}
-                              className="text-sm font-medium flex-1 cursor-pointer"
-                              style={{
-                                color: checked
-                                  ? "oklch(0.52 0.1 155)"
-                                  : "oklch(0.28 0.02 75)",
-                                textDecoration: checked
-                                  ? "line-through"
-                                  : "none",
-                                opacity: checked ? 0.65 : 1,
-                              }}
-                            >
-                              {cert}
-                            </label>
-                          )}
-                          {!isEditing && (
-                            <button
-                              type="button"
-                              data-ocid={`certificates.item.edit_button.${i + 1}`}
-                              onClick={() =>
-                                setEditingItem({
-                                  section: "certificates",
-                                  index: i,
-                                  value: cert,
-                                })
-                              }
-                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded flex-shrink-0"
-                              style={{ color: "oklch(0.55 0.08 155)" }}
-                            >
-                              <Pencil size={14} />
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </CardContent>
-                </Card>
+                                  )
+                                }
+                                className="h-7 text-sm flex-1 bg-transparent border-b border-t-0 border-l-0 border-r-0 rounded-none focus-visible:ring-0 px-1"
+                                style={{ color: "oklch(0.28 0.02 75)" }}
+                              />
+                            ) : (
+                              <label
+                                htmlFor={`cert-${i}`}
+                                className="text-sm font-medium flex-1 cursor-pointer"
+                                style={{
+                                  color: checked
+                                    ? "oklch(0.52 0.1 155)"
+                                    : "oklch(0.28 0.02 75)",
+                                  textDecoration: checked
+                                    ? "line-through"
+                                    : "none",
+                                  opacity: checked ? 0.65 : 1,
+                                }}
+                              >
+                                {cert}
+                              </label>
+                            )}
+                            {!isEditing && (
+                              <button
+                                type="button"
+                                data-ocid={`certificates.item.edit_button.${i + 1}`}
+                                onClick={() =>
+                                  setEditingItem({
+                                    section: "certificates",
+                                    index: i,
+                                    value: cert,
+                                  })
+                                }
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded flex-shrink-0"
+                                style={{ color: "oklch(0.55 0.08 155)" }}
+                              >
+                                <Pencil size={14} />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </CardContent>
+                  </Card>
 
-                {/* NET Preparation */}
-                <Card className="card-journal rounded-2xl border-0">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle
-                        className="font-display text-xl"
-                        style={{ color: "oklch(0.32 0.12 155)" }}
-                      >
-                        🧠 NET Preparation
-                      </CardTitle>
-                      <Badge
-                        className="rounded-full text-xs px-2.5"
-                        style={{
-                          background: "oklch(0.42 0.14 155 / 0.12)",
-                          color: "oklch(0.38 0.12 155)",
-                          border: "1px solid oklch(0.55 0.12 155 / 0.25)",
-                        }}
-                      >
-                        {checkedItems.nETPrep.length}/{netPrep.length}
-                      </Badge>
-                    </div>
-                    <div className="mt-2 academics-progress">
-                      <Progress
-                        value={pct(checkedItems.nETPrep.length, netPrep.length)}
-                        className="h-2.5 rounded-full"
-                        style={{ background: "oklch(0.88 0.025 155 / 0.4)" }}
-                      />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-1.5">
-                    {netPrep.map((item, i) => {
-                      const checked = checkedItems.nETPrep.includes(item);
-                      const isEditing =
-                        editingItem?.section === "netPrep" &&
-                        editingItem.index === i;
-                      return (
-                        <div
-                          key={`net-${item}`}
-                          className="group flex items-center gap-3 p-2.5 rounded-lg transition-colors"
+                  {/* NET Preparation */}
+                  <Card className="card-journal rounded-2xl border-0">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <CardTitle
+                          className="font-display text-xl"
+                          style={{ color: "oklch(0.32 0.12 155)" }}
+                        >
+                          🧠 NET Preparation
+                        </CardTitle>
+                        <Badge
+                          className="rounded-full text-xs px-2.5"
                           style={{
-                            background: checked
-                              ? "oklch(0.42 0.14 155 / 0.08)"
-                              : "transparent",
+                            background: "oklch(0.42 0.14 155 / 0.12)",
+                            color: "oklch(0.38 0.12 155)",
+                            border: "1px solid oklch(0.55 0.12 155 / 0.25)",
                           }}
                         >
-                          <Checkbox
-                            id={`net-${i}`}
-                            data-ocid={`academics.net.checkbox.${i + 1}`}
-                            checked={checked}
-                            onCheckedChange={() => toggleCheck("nETPrep", item)}
-                          />
-                          {isEditing ? (
-                            <Input
-                              data-ocid={`netprep.item.input.${i + 1}`}
-                              autoFocus
-                              value={editingItem.value}
-                              onChange={(e) =>
-                                setEditingItem({
-                                  ...editingItem,
-                                  value: e.target.value,
-                                })
+                          {checkedItems.nETPrep.length}/{netPrep.length}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 academics-progress">
+                        <Progress
+                          value={pct(
+                            checkedItems.nETPrep.length,
+                            netPrep.length,
+                          )}
+                          className="h-2.5 rounded-full"
+                          style={{ background: "oklch(0.88 0.025 155 / 0.4)" }}
+                        />
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-1.5">
+                      {netPrep.map((item, i) => {
+                        const checked = checkedItems.nETPrep.includes(item);
+                        const isEditing =
+                          editingItem?.section === "netPrep" &&
+                          editingItem.index === i;
+                        return (
+                          <div
+                            key={`net-${item}`}
+                            className="group flex items-center gap-3 p-2.5 rounded-lg transition-colors"
+                            style={{
+                              background: checked
+                                ? "oklch(0.42 0.14 155 / 0.08)"
+                                : "transparent",
+                            }}
+                          >
+                            <Checkbox
+                              id={`net-${i}`}
+                              data-ocid={`academics.net.checkbox.${i + 1}`}
+                              checked={checked}
+                              onCheckedChange={() =>
+                                toggleCheck("nETPrep", item)
                               }
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter")
+                            />
+                            {isEditing ? (
+                              <Input
+                                data-ocid={`netprep.item.input.${i + 1}`}
+                                autoFocus
+                                value={editingItem.value}
+                                onChange={(e) =>
+                                  setEditingItem({
+                                    ...editingItem,
+                                    value: e.target.value,
+                                  })
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter")
+                                    renameItem(
+                                      "netPrep",
+                                      i,
+                                      editingItem.value,
+                                      setNetPrep,
+                                      "nETPrep",
+                                      item,
+                                    );
+                                  if (e.key === "Escape") setEditingItem(null);
+                                }}
+                                onBlur={() =>
                                   renameItem(
                                     "netPrep",
                                     i,
@@ -2491,705 +3495,896 @@ function AppContent() {
                                     setNetPrep,
                                     "nETPrep",
                                     item,
-                                  );
-                                if (e.key === "Escape") setEditingItem(null);
-                              }}
-                              onBlur={() =>
-                                renameItem(
-                                  "netPrep",
-                                  i,
-                                  editingItem.value,
-                                  setNetPrep,
-                                  "nETPrep",
-                                  item,
-                                )
-                              }
-                              className="h-7 text-sm flex-1 bg-transparent border-b border-t-0 border-l-0 border-r-0 rounded-none focus-visible:ring-0 px-1"
-                              style={{ color: "oklch(0.28 0.02 75)" }}
-                            />
-                          ) : (
-                            <label
-                              htmlFor={`net-${i}`}
-                              className="text-sm font-medium flex-1 cursor-pointer"
-                              style={{
-                                color: checked
-                                  ? "oklch(0.52 0.1 155)"
-                                  : "oklch(0.28 0.02 75)",
-                                textDecoration: checked
-                                  ? "line-through"
-                                  : "none",
-                                opacity: checked ? 0.65 : 1,
-                              }}
-                            >
-                              {item}
-                            </label>
-                          )}
-                          {!isEditing && (
-                            <button
-                              type="button"
-                              data-ocid={`netprep.item.edit_button.${i + 1}`}
-                              onClick={() =>
-                                setEditingItem({
-                                  section: "netPrep",
-                                  index: i,
-                                  value: item,
-                                })
-                              }
-                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded flex-shrink-0"
-                              style={{ color: "oklch(0.55 0.08 155)" }}
-                            >
-                              <Pencil size={14} />
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </CardContent>
-                </Card>
-              </div>
-            </motion.div>
-          </TabsContent>
+                                  )
+                                }
+                                className="h-7 text-sm flex-1 bg-transparent border-b border-t-0 border-l-0 border-r-0 rounded-none focus-visible:ring-0 px-1"
+                                style={{ color: "oklch(0.28 0.02 75)" }}
+                              />
+                            ) : (
+                              <label
+                                htmlFor={`net-${i}`}
+                                className="text-sm font-medium flex-1 cursor-pointer"
+                                style={{
+                                  color: checked
+                                    ? "oklch(0.52 0.1 155)"
+                                    : "oklch(0.28 0.02 75)",
+                                  textDecoration: checked
+                                    ? "line-through"
+                                    : "none",
+                                  opacity: checked ? 0.65 : 1,
+                                }}
+                              >
+                                {item}
+                              </label>
+                            )}
+                            {!isEditing && (
+                              <button
+                                type="button"
+                                data-ocid={`netprep.item.edit_button.${i + 1}`}
+                                onClick={() =>
+                                  setEditingItem({
+                                    section: "netPrep",
+                                    index: i,
+                                    value: item,
+                                  })
+                                }
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded flex-shrink-0"
+                                style={{ color: "oklch(0.55 0.08 155)" }}
+                              >
+                                <Pencil size={14} />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </CardContent>
+                  </Card>
+                </div>
+              </motion.div>
+            </TabsContent>
 
-          {/* ──────────────── CAREER TAB ──────────────── */}
-          <TabsContent value="career" className="space-y-5 mt-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.4 }}
-              className="grid gap-5 md:grid-cols-2"
-            >
-              {/* Dynamic Students */}
-              <DynamicStudentsSection onChange={() => {}} />
-              {/* Tuition Income Tracker */}
-              <Card className="card-journal rounded-2xl border-0">
-                <CardHeader className="pb-3">
-                  <CardTitle
-                    className="font-display text-xl"
-                    style={{ color: "oklch(0.38 0.16 50)" }}
-                  >
-                    💰 Tuition Income
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <Input
-                      data-ocid="income.label_input"
-                      placeholder="Income source (e.g. Naithan)"
-                      value={incomeEntryLabel}
-                      onChange={(e) => setIncomeEntryLabel(e.target.value)}
-                      onKeyDown={(e) =>
-                        e.key === "Enter" && handleAddIncomeEntry()
-                      }
-                      className="rounded-xl border-0"
-                      style={{
-                        background: "oklch(0.95 0.02 60)",
-                        color: "oklch(0.25 0.04 60)",
-                      }}
-                    />
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="text-xl font-bold px-3 py-2 rounded-lg"
-                        style={{
-                          background: "oklch(0.92 0.04 60)",
-                          color: "oklch(0.42 0.14 50)",
-                        }}
-                      >
-                        ₹
-                      </span>
+            {/* ──────────────── CAREER TAB ──────────────── */}
+            <TabsContent value="career" className="space-y-5 mt-6">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4 }}
+                className="grid gap-5 md:grid-cols-2"
+              >
+                {/* Dynamic Students */}
+                <DynamicStudentsSection onChange={() => {}} />
+                {/* Tuition Income Tracker */}
+                <Card className="card-journal rounded-2xl border-0">
+                  <CardHeader className="pb-3">
+                    <CardTitle
+                      className="font-display text-xl"
+                      style={{ color: "oklch(0.38 0.16 50)" }}
+                    >
+                      💰 Tuition Income
+                    </CardTitle>
+                    <p
+                      className="text-sm mt-0.5"
+                      style={{ color: "oklch(0.55 0.1 55)" }}
+                    >
+                      {new Date().toLocaleString("default", {
+                        month: "long",
+                        year: "numeric",
+                      })}
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="space-y-2">
                       <Input
-                        data-ocid="income.amount_input"
-                        type="number"
-                        placeholder="Amount"
-                        value={incomeEntryAmount}
-                        onChange={(e) => setIncomeEntryAmount(e.target.value)}
+                        data-ocid="income.label_input"
+                        placeholder="Income source (e.g. Naithan)"
+                        value={incomeEntryLabel}
+                        onChange={(e) => setIncomeEntryLabel(e.target.value)}
                         onKeyDown={(e) =>
                           e.key === "Enter" && handleAddIncomeEntry()
                         }
-                        className="flex-1 rounded-xl border-0 text-base font-medium"
+                        className="rounded-xl border-0"
                         style={{
                           background: "oklch(0.95 0.02 60)",
                           color: "oklch(0.25 0.04 60)",
                         }}
                       />
-                      <Button
-                        data-ocid="income.add_button"
-                        onClick={handleAddIncomeEntry}
-                        className="rounded-xl px-4 font-semibold"
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="text-xl font-bold px-3 py-2 rounded-lg"
+                          style={{
+                            background: "oklch(0.92 0.04 60)",
+                            color: "oklch(0.42 0.14 50)",
+                          }}
+                        >
+                          ₹
+                        </span>
+                        <Input
+                          data-ocid="income.amount_input"
+                          type="number"
+                          placeholder="Amount"
+                          value={incomeEntryAmount}
+                          onChange={(e) => setIncomeEntryAmount(e.target.value)}
+                          onKeyDown={(e) =>
+                            e.key === "Enter" && handleAddIncomeEntry()
+                          }
+                          className="flex-1 rounded-xl border-0 text-base font-medium"
+                          style={{
+                            background: "oklch(0.95 0.02 60)",
+                            color: "oklch(0.25 0.04 60)",
+                          }}
+                        />
+                        <Button
+                          data-ocid="income.add_button"
+                          onClick={handleAddIncomeEntry}
+                          className="rounded-xl px-4 font-semibold"
+                          style={{
+                            background: "oklch(0.62 0.18 50)",
+                            color: "white",
+                          }}
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    </div>
+                    {incomeEntries.length > 0 && (
+                      <div className="space-y-2">
+                        {incomeEntries.map((entry, idx) => (
+                          <div
+                            key={`${entry.label}-${idx}`}
+                            data-ocid={`income.item.${idx + 1}`}
+                            className="flex items-center justify-between px-3 py-2 rounded-xl"
+                            style={{
+                              background: "oklch(0.94 0.03 60 / 0.7)",
+                              border: "1px solid oklch(0.85 0.06 55 / 0.3)",
+                            }}
+                          >
+                            <span
+                              className="text-sm font-medium"
+                              style={{ color: "oklch(0.38 0.12 55)" }}
+                            >
+                              {entry.label}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="text-sm font-bold"
+                                style={{ color: "oklch(0.42 0.16 50)" }}
+                              >
+                                ₹{entry.amount.toLocaleString("en-IN")}
+                              </span>
+                              <button
+                                type="button"
+                                data-ocid={`income.delete_button.${idx + 1}`}
+                                onClick={() => handleDeleteIncomeEntry(idx)}
+                                className="text-xs px-2 py-1 rounded-lg"
+                                style={{
+                                  background: "oklch(0.88 0.06 25 / 0.4)",
+                                  color: "oklch(0.45 0.15 25)",
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div
+                      className="p-4 rounded-xl"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, oklch(0.94 0.04 55), oklch(0.92 0.05 50))",
+                        border: "1px solid oklch(0.82 0.06 55 / 0.4)",
+                      }}
+                    >
+                      <p
+                        className="text-xs font-medium uppercase tracking-wider"
+                        style={{ color: "oklch(0.58 0.1 55)" }}
+                      >
+                        This Month
+                      </p>
+                      <p
+                        className="font-display text-3xl font-bold mt-1"
+                        style={{ color: "oklch(0.38 0.16 50)" }}
+                      >
+                        ₹{monthlyIncome.toLocaleString("en-IN")}
+                      </p>
+                      {incomeHistory.length > 0 && (
+                        <p
+                          className="text-xs mt-1"
+                          style={{ color: "oklch(0.55 0.1 55)" }}
+                        >
+                          Last month: ₹
+                          {(
+                            incomeHistory[incomeHistory.length - 1]?.total ?? 0
+                          ).toLocaleString("en-IN")}
+                          {" · "}Total: ₹
+                          {(
+                            incomeHistory.reduce((s, h) => s + h.total, 0) +
+                            monthlyIncome
+                          ).toLocaleString("en-IN")}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-sm">
+                        <span style={{ color: "oklch(0.5 0.08 55)" }}>
+                          Monthly Goal
+                        </span>
+                        <span
+                          className="font-semibold"
+                          style={{ color: "oklch(0.42 0.14 50)" }}
+                        >
+                          ₹{INCOME_GOAL.toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <div className="career-progress">
+                        <Progress
+                          value={incomeGoalPct}
+                          className="h-3 rounded-full"
+                          style={{ background: "oklch(0.88 0.03 55 / 0.4)" }}
+                        />
+                      </div>
+                      <p
+                        className="text-xs text-right"
+                        style={{ color: "oklch(0.58 0.1 55)" }}
+                      >
+                        {incomeGoalPct}% of goal reached
+                      </p>
+                    </div>
+                    {(() => {
+                      const now = new Date();
+                      const chartData: {
+                        label: string;
+                        value: number;
+                        isCurrent: boolean;
+                      }[] = [];
+                      for (let i = 5; i >= 1; i--) {
+                        const d = new Date(
+                          now.getFullYear(),
+                          now.getMonth() - i,
+                          1,
+                        );
+                        const mName = d.toLocaleString("default", {
+                          month: "short",
+                        });
+                        const yr = d.getFullYear();
+                        const found = incomeHistory.find(
+                          (h) =>
+                            h.month ===
+                              d.toLocaleString("default", { month: "long" }) &&
+                            h.year === yr,
+                        );
+                        chartData.push({
+                          label: mName,
+                          value: found?.total ?? 0,
+                          isCurrent: false,
+                        });
+                      }
+                      chartData.push({
+                        label: now.toLocaleString("default", {
+                          month: "short",
+                        }),
+                        value: monthlyIncome,
+                        isCurrent: true,
+                      });
+                      const maxVal = Math.max(
+                        ...chartData.map((d) => d.value),
+                        1,
+                      );
+                      return (
+                        <div
+                          className="rounded-xl p-3"
+                          style={{ background: "oklch(0.96 0.02 60)" }}
+                        >
+                          <p
+                            className="text-xs font-semibold mb-3"
+                            style={{ color: "oklch(0.5 0.1 55)" }}
+                          >
+                            📊 Income Growth
+                          </p>
+                          <div className="flex items-end gap-1 h-20">
+                            {chartData.map((d) => (
+                              <div
+                                key={d.label + String(d.isCurrent)}
+                                className="flex-1 flex flex-col items-center gap-1"
+                              >
+                                <div
+                                  className="w-full rounded-t-md transition-all"
+                                  style={{
+                                    height: `${Math.max(4, (d.value / maxVal) * 64)}px`,
+                                    background: d.isCurrent
+                                      ? "oklch(0.62 0.18 50)"
+                                      : "oklch(0.78 0.1 55 / 0.6)",
+                                  }}
+                                  title={`₹${d.value.toLocaleString("en-IN")}`}
+                                />
+                                <span
+                                  className="text-[10px]"
+                                  style={{ color: "oklch(0.5 0.08 55)" }}
+                                >
+                                  {d.label}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {incomeHistory.length > 0 && (
+                      <div>
+                        <p
+                          className="text-xs font-semibold mb-2"
+                          style={{ color: "oklch(0.5 0.1 55)" }}
+                        >
+                          📅 Past Months
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {incomeHistory
+                            .slice()
+                            .reverse()
+                            .map((h) => (
+                              <button
+                                key={`${h.year}-${h.month}`}
+                                type="button"
+                                onClick={() =>
+                                  setSelectedMonth(
+                                    selectedMonth === `${h.year}-${h.month}`
+                                      ? ""
+                                      : `${h.year}-${h.month}`,
+                                  )
+                                }
+                                className="text-xs px-3 py-1.5 rounded-full font-medium transition-all"
+                                style={{
+                                  background:
+                                    selectedMonth === `${h.year}-${h.month}`
+                                      ? "oklch(0.62 0.18 50)"
+                                      : "oklch(0.9 0.04 55)",
+                                  color:
+                                    selectedMonth === `${h.year}-${h.month}`
+                                      ? "white"
+                                      : "oklch(0.42 0.14 50)",
+                                }}
+                              >
+                                {h.month} {h.year}
+                              </button>
+                            ))}
+                        </div>
+                        {selectedMonth &&
+                          incomeHistory.find(
+                            (h) => `${h.year}-${h.month}` === selectedMonth,
+                          ) && (
+                            <div
+                              className="mt-2 p-3 rounded-xl"
+                              style={{
+                                background: "oklch(0.94 0.03 60 / 0.7)",
+                                border: "1px solid oklch(0.85 0.06 55 / 0.3)",
+                              }}
+                            >
+                              {(() => {
+                                const h = incomeHistory.find(
+                                  (h) =>
+                                    `${h.year}-${h.month}` === selectedMonth,
+                                )!;
+                                return (
+                                  <>
+                                    <p
+                                      className="text-sm font-bold mb-1"
+                                      style={{ color: "oklch(0.38 0.16 50)" }}
+                                    >
+                                      {h.month} {h.year}: ₹
+                                      {h.total.toLocaleString("en-IN")}
+                                    </p>
+                                    {h.entries.map((e) => (
+                                      <p
+                                        key={e.label}
+                                        className="text-xs"
+                                        style={{ color: "oklch(0.5 0.08 55)" }}
+                                      >
+                                        {e.label}: ₹
+                                        {e.amount.toLocaleString("en-IN")}
+                                      </p>
+                                    ))}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          )}
+                      </div>
+                    )}
+                    <Button
+                      data-ocid="income.reset_month_button"
+                      onClick={handleResetMonth}
+                      className="w-full rounded-xl font-semibold"
+                      style={{
+                        background: "oklch(0.55 0.15 285)",
+                        color: "white",
+                      }}
+                    >
+                      🔄 Reset Month & Save
+                    </Button>
+                  </CardContent>
+                </Card>
+                {/* Pomodoro Timer */}
+                <div
+                  className="rounded-2xl p-6 flex flex-col items-center gap-5"
+                  style={{
+                    background:
+                      "linear-gradient(145deg, oklch(0.97 0.022 225), oklch(0.95 0.028 215))",
+                    border: "1px solid oklch(0.88 0.03 225 / 0.6)",
+                    boxShadow:
+                      "0 4px 24px oklch(0.5 0.18 225 / 0.1), 0 0 0 1px oklch(0.82 0.04 225 / 0.3)",
+                  }}
+                >
+                  <div>
+                    <h2
+                      className="font-display text-xl font-bold text-center"
+                      style={{ color: "oklch(0.32 0.15 225)" }}
+                    >
+                      ⏱ Pomodoro
+                    </h2>
+                    <p
+                      className="text-xs text-center mt-0.5"
+                      style={{ color: "oklch(0.55 0.1 225)" }}
+                    >
+                      25‑minute focus session
+                    </p>
+                  </div>
+
+                  <PomodoroRing
+                    time={time}
+                    total={1500}
+                    size={180}
+                    strokeWidth={12}
+                  />
+
+                  <div className="flex gap-2 w-full">
+                    <Button
+                      data-ocid="timer.primary_button"
+                      onClick={() => setRunning(true)}
+                      disabled={running}
+                      className="flex-1 rounded-xl font-medium"
+                      style={{
+                        background: running
+                          ? "oklch(0.85 0.025 225)"
+                          : "oklch(0.5 0.18 225)",
+                        color: running ? "oklch(0.55 0.1 225)" : "white",
+                      }}
+                    >
+                      Start
+                    </Button>
+                    <Button
+                      data-ocid="timer.secondary_button"
+                      onClick={() => setRunning(false)}
+                      disabled={!running}
+                      variant="outline"
+                      className="flex-1 rounded-xl font-medium border-0"
+                      style={{
+                        background: !running
+                          ? "oklch(0.91 0.02 225)"
+                          : "oklch(0.88 0.03 225)",
+                        color: !running
+                          ? "oklch(0.65 0.08 225)"
+                          : "oklch(0.42 0.15 225)",
+                      }}
+                    >
+                      Pause
+                    </Button>
+                    <Button
+                      data-ocid="timer.cancel_button"
+                      onClick={() => {
+                        setRunning(false);
+                        setTime(1500);
+                      }}
+                      variant="outline"
+                      className="rounded-xl border-0 px-3"
+                      style={{
+                        background: "oklch(0.91 0.02 225)",
+                        color: "oklch(0.52 0.1 225)",
+                      }}
+                      aria-label="Reset timer"
+                    >
+                      ↺
+                    </Button>
+                  </div>
+
+                  {/* Timer status */}
+                  <div
+                    className="w-full py-2 px-3 rounded-xl text-center text-sm"
+                    style={{
+                      background: running
+                        ? "oklch(0.5 0.18 225 / 0.1)"
+                        : "oklch(0.91 0.02 225 / 0.8)",
+                      color: running
+                        ? "oklch(0.42 0.15 225)"
+                        : "oklch(0.6 0.08 225)",
+                      border: `1px solid ${running ? "oklch(0.65 0.15 225 / 0.3)" : "oklch(0.85 0.025 225 / 0.5)"}`,
+                    }}
+                  >
+                    {running
+                      ? "🔥 Stay focused!"
+                      : time === 1500
+                        ? "Ready to focus?"
+                        : "⏸ Paused"}
+                  </div>
+                </div>
+              </motion.div>
+            </TabsContent>
+
+            {/* ──────────────── DAILY TAB ──────────────── */}
+            <TabsContent value="daily" className="space-y-5 mt-6">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4 }}
+                className="grid gap-5 md:grid-cols-[1fr_260px]"
+              >
+                {/* Daily Task Planner */}
+                <Card className="card-journal rounded-2xl border-0">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle
+                        className="font-display text-xl"
+                        style={{ color: "oklch(0.32 0.15 225)" }}
+                      >
+                        📅 Daily Planner
+                      </CardTitle>
+                      <Badge
+                        className="rounded-full text-xs px-2.5"
                         style={{
-                          background: "oklch(0.62 0.18 50)",
+                          background: "oklch(0.5 0.18 225 / 0.1)",
+                          color: "oklch(0.42 0.15 225)",
+                          border: "1px solid oklch(0.6 0.15 225 / 0.3)",
+                        }}
+                      >
+                        {dailyTasks.filter((t) => t.done).length}/
+                        {dailyTasks.length} done
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex gap-2">
+                      <Input
+                        data-ocid="daily.todo.input"
+                        placeholder="Add a new task for today..."
+                        value={taskInput}
+                        onChange={(e) => setTaskInput(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && addTask()}
+                        className="flex-1 rounded-xl border-0"
+                        style={{
+                          background: "oklch(0.94 0.022 225 / 0.5)",
+                          color: "oklch(0.25 0.05 225)",
+                        }}
+                      />
+                      <Button
+                        data-ocid="daily.todo.add_button"
+                        onClick={addTask}
+                        className="rounded-xl px-4 shrink-0"
+                        style={{
+                          background: "oklch(0.5 0.18 225)",
                           color: "white",
                         }}
                       >
-                        Add
+                        <Plus className="w-4 h-4" />
                       </Button>
                     </div>
-                  </div>
-                  {incomeEntries.length > 0 && (
-                    <div className="space-y-2">
-                      {incomeEntries.map((entry, idx) => (
-                        <div
-                          key={`${entry.label}-${idx}`}
-                          data-ocid={`income.item.${idx + 1}`}
-                          className="flex items-center justify-between px-3 py-2 rounded-xl"
-                          style={{
-                            background: "oklch(0.94 0.03 60 / 0.7)",
-                            border: "1px solid oklch(0.85 0.06 55 / 0.3)",
-                          }}
+                    {dailyTasks.length === 0 ? (
+                      <div
+                        data-ocid="daily.todo.empty_state"
+                        className="text-center py-10 rounded-xl"
+                        style={{ background: "oklch(0.96 0.018 225 / 0.5)" }}
+                      >
+                        <p className="text-3xl mb-2">✨</p>
+                        <p
+                          className="font-medium"
+                          style={{ color: "oklch(0.5 0.1 225)" }}
                         >
-                          <span
-                            className="text-sm font-medium"
-                            style={{ color: "oklch(0.38 0.12 55)" }}
-                          >
-                            {entry.label}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span
-                              className="text-sm font-bold"
-                              style={{ color: "oklch(0.42 0.16 50)" }}
-                            >
-                              ₹{entry.amount.toLocaleString("en-IN")}
-                            </span>
-                            <button
-                              type="button"
-                              data-ocid={`income.delete_button.${idx + 1}`}
-                              onClick={() => handleDeleteIncomeEntry(idx)}
-                              className="text-xs px-2 py-1 rounded-lg"
+                          Your day is a blank canvas
+                        </p>
+                        <p
+                          className="text-sm mt-1"
+                          style={{ color: "oklch(0.65 0.08 225)" }}
+                        >
+                          Add tasks to plan your productive day
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <AnimatePresence mode="popLayout">
+                          {dailyTasks.map((task, i) => (
+                            <motion.div
+                              key={task.description || i}
+                              initial={{ opacity: 0, x: -16 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: 16, height: 0 }}
+                              transition={{ duration: 0.25 }}
+                              data-ocid={`daily.todo.item.${i + 1}`}
+                              className="flex items-center gap-3 p-3 rounded-xl group transition-all"
                               style={{
-                                background: "oklch(0.88 0.06 25 / 0.4)",
-                                color: "oklch(0.45 0.15 25)",
+                                background: task.done
+                                  ? "oklch(0.5 0.18 225 / 0.08)"
+                                  : "oklch(0.96 0.018 225 / 0.5)",
+                                border: `1px solid ${task.done ? "oklch(0.6 0.15 225 / 0.25)" : "oklch(0.88 0.022 225 / 0.5)"}`,
                               }}
                             >
-                              ✕
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div
-                    className="p-4 rounded-xl"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, oklch(0.94 0.04 55), oklch(0.92 0.05 50))",
-                      border: "1px solid oklch(0.82 0.06 55 / 0.4)",
-                    }}
-                  >
-                    <p
-                      className="text-xs font-medium uppercase tracking-wider"
-                      style={{ color: "oklch(0.58 0.1 55)" }}
-                    >
-                      Monthly Total
-                    </p>
-                    <p
-                      className="font-display text-3xl font-bold mt-1"
-                      style={{ color: "oklch(0.38 0.16 50)" }}
-                    >
-                      ₹{monthlyIncome.toLocaleString("en-IN")}
-                    </p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-sm">
-                      <span style={{ color: "oklch(0.5 0.08 55)" }}>
-                        Monthly Goal
-                      </span>
-                      <span
-                        className="font-semibold"
-                        style={{ color: "oklch(0.42 0.14 50)" }}
+                              <Checkbox
+                                data-ocid={
+                                  i === 0 ? "daily.todo.checkbox.1" : undefined
+                                }
+                                checked={task.done}
+                                onCheckedChange={() => toggleTask(i)}
+                                id={`task-${i}`}
+                              />
+                              <label
+                                htmlFor={`task-${i}`}
+                                className="flex-1 text-sm cursor-pointer leading-snug"
+                                style={{
+                                  color: task.done
+                                    ? "oklch(0.6 0.1 225)"
+                                    : "oklch(0.28 0.04 75)",
+                                  textDecoration: task.done
+                                    ? "line-through"
+                                    : "none",
+                                  opacity: task.done ? 0.7 : 1,
+                                }}
+                              >
+                                {task.description}
+                              </label>
+                              <button
+                                type="button"
+                                data-ocid={
+                                  i === 0
+                                    ? "daily.todo.delete_button.1"
+                                    : undefined
+                                }
+                                onClick={() => deleteTask(i)}
+                                className="opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-opacity"
+                                style={{ color: "oklch(0.58 0.2 25)" }}
+                                aria-label="Delete task"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    )}
+                    {dailyTasks.length > 0 && (
+                      <div className="pt-1 daily-progress">
+                        <Progress
+                          value={pct(
+                            dailyTasks.filter((t) => t.done).length,
+                            dailyTasks.length,
+                          )}
+                          className="h-2 rounded-full"
+                          style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
+                        />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Daily Goals */}
+                <Card className="card-journal rounded-2xl border-0">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle
+                        className="font-display text-xl"
+                        style={{ color: "oklch(0.32 0.15 225)" }}
                       >
-                        ₹{INCOME_GOAL.toLocaleString("en-IN")}
-                      </span>
+                        🎯 Daily Goals
+                      </CardTitle>
+                      <Badge
+                        className="rounded-full text-xs px-2.5"
+                        style={{
+                          background: "oklch(0.5 0.18 225 / 0.1)",
+                          color: "oklch(0.42 0.15 225)",
+                          border: "1px solid oklch(0.6 0.15 225 / 0.3)",
+                        }}
+                      >
+                        {dailyGoals.filter((g) => g.done).length}/
+                        {dailyGoals.length} done
+                      </Badge>
                     </div>
-                    <div className="career-progress">
-                      <Progress
-                        value={incomeGoalPct}
-                        className="h-3 rounded-full"
-                        style={{ background: "oklch(0.88 0.03 55 / 0.4)" }}
+                    {dailyGoals.length > 0 && (
+                      <div className="mt-2">
+                        <Progress
+                          value={pct(
+                            dailyGoals.filter((g) => g.done).length,
+                            dailyGoals.length,
+                          )}
+                          className="h-2 rounded-full"
+                          style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
+                        />
+                      </div>
+                    )}
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex gap-2">
+                      <Input
+                        data-ocid="daily_goals.input"
+                        placeholder="Add a goal for today..."
+                        value={goalInput}
+                        onChange={(e) => setGoalInput(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && addDailyGoal()}
+                        className="flex-1 rounded-xl border-0"
+                        style={{
+                          background: "oklch(0.94 0.022 225 / 0.5)",
+                          color: "oklch(0.25 0.05 225)",
+                        }}
                       />
-                    </div>
-                    <p
-                      className="text-xs text-right"
-                      style={{ color: "oklch(0.58 0.1 55)" }}
-                    >
-                      {incomeGoalPct}% of goal reached
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-              {/* Pomodoro Timer */}
-              <div
-                className="rounded-2xl p-6 flex flex-col items-center gap-5"
-                style={{
-                  background:
-                    "linear-gradient(145deg, oklch(0.97 0.022 225), oklch(0.95 0.028 215))",
-                  border: "1px solid oklch(0.88 0.03 225 / 0.6)",
-                  boxShadow:
-                    "0 4px 24px oklch(0.5 0.18 225 / 0.1), 0 0 0 1px oklch(0.82 0.04 225 / 0.3)",
-                }}
-              >
-                <div>
-                  <h2
-                    className="font-display text-xl font-bold text-center"
-                    style={{ color: "oklch(0.32 0.15 225)" }}
-                  >
-                    ⏱ Pomodoro
-                  </h2>
-                  <p
-                    className="text-xs text-center mt-0.5"
-                    style={{ color: "oklch(0.55 0.1 225)" }}
-                  >
-                    25‑minute focus session
-                  </p>
-                </div>
-
-                <PomodoroRing
-                  time={time}
-                  total={1500}
-                  size={180}
-                  strokeWidth={12}
-                />
-
-                <div className="flex gap-2 w-full">
-                  <Button
-                    data-ocid="timer.primary_button"
-                    onClick={() => setRunning(true)}
-                    disabled={running}
-                    className="flex-1 rounded-xl font-medium"
-                    style={{
-                      background: running
-                        ? "oklch(0.85 0.025 225)"
-                        : "oklch(0.5 0.18 225)",
-                      color: running ? "oklch(0.55 0.1 225)" : "white",
-                    }}
-                  >
-                    Start
-                  </Button>
-                  <Button
-                    data-ocid="timer.secondary_button"
-                    onClick={() => setRunning(false)}
-                    disabled={!running}
-                    variant="outline"
-                    className="flex-1 rounded-xl font-medium border-0"
-                    style={{
-                      background: !running
-                        ? "oklch(0.91 0.02 225)"
-                        : "oklch(0.88 0.03 225)",
-                      color: !running
-                        ? "oklch(0.65 0.08 225)"
-                        : "oklch(0.42 0.15 225)",
-                    }}
-                  >
-                    Pause
-                  </Button>
-                  <Button
-                    data-ocid="timer.cancel_button"
-                    onClick={() => {
-                      setRunning(false);
-                      setTime(1500);
-                    }}
-                    variant="outline"
-                    className="rounded-xl border-0 px-3"
-                    style={{
-                      background: "oklch(0.91 0.02 225)",
-                      color: "oklch(0.52 0.1 225)",
-                    }}
-                    aria-label="Reset timer"
-                  >
-                    ↺
-                  </Button>
-                </div>
-
-                {/* Timer status */}
-                <div
-                  className="w-full py-2 px-3 rounded-xl text-center text-sm"
-                  style={{
-                    background: running
-                      ? "oklch(0.5 0.18 225 / 0.1)"
-                      : "oklch(0.91 0.02 225 / 0.8)",
-                    color: running
-                      ? "oklch(0.42 0.15 225)"
-                      : "oklch(0.6 0.08 225)",
-                    border: `1px solid ${running ? "oklch(0.65 0.15 225 / 0.3)" : "oklch(0.85 0.025 225 / 0.5)"}`,
-                  }}
-                >
-                  {running
-                    ? "🔥 Stay focused!"
-                    : time === 1500
-                      ? "Ready to focus?"
-                      : "⏸ Paused"}
-                </div>
-              </div>
-            </motion.div>
-          </TabsContent>
-
-          {/* ──────────────── DAILY TAB ──────────────── */}
-          <TabsContent value="daily" className="space-y-5 mt-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.4 }}
-              className="grid gap-5 md:grid-cols-[1fr_260px]"
-            >
-              {/* Daily Task Planner */}
-              <Card className="card-journal rounded-2xl border-0">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle
-                      className="font-display text-xl"
-                      style={{ color: "oklch(0.32 0.15 225)" }}
-                    >
-                      📅 Daily Planner
-                    </CardTitle>
-                    <Badge
-                      className="rounded-full text-xs px-2.5"
-                      style={{
-                        background: "oklch(0.5 0.18 225 / 0.1)",
-                        color: "oklch(0.42 0.15 225)",
-                        border: "1px solid oklch(0.6 0.15 225 / 0.3)",
-                      }}
-                    >
-                      {dailyTasks.filter((t) => t.done).length}/
-                      {dailyTasks.length} done
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex gap-2">
-                    <Input
-                      data-ocid="daily.todo.input"
-                      placeholder="Add a new task for today..."
-                      value={taskInput}
-                      onChange={(e) => setTaskInput(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addTask()}
-                      className="flex-1 rounded-xl border-0"
-                      style={{
-                        background: "oklch(0.94 0.022 225 / 0.5)",
-                        color: "oklch(0.25 0.05 225)",
-                      }}
-                    />
-                    <Button
-                      data-ocid="daily.todo.add_button"
-                      onClick={addTask}
-                      className="rounded-xl px-4 shrink-0"
-                      style={{
-                        background: "oklch(0.5 0.18 225)",
-                        color: "white",
-                      }}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  {dailyTasks.length === 0 ? (
-                    <div
-                      data-ocid="daily.todo.empty_state"
-                      className="text-center py-10 rounded-xl"
-                      style={{ background: "oklch(0.96 0.018 225 / 0.5)" }}
-                    >
-                      <p className="text-3xl mb-2">✨</p>
-                      <p
-                        className="font-medium"
-                        style={{ color: "oklch(0.5 0.1 225)" }}
+                      <Button
+                        data-ocid="daily_goals.add_button"
+                        onClick={addDailyGoal}
+                        className="rounded-xl px-4 shrink-0"
+                        style={{
+                          background: "oklch(0.5 0.18 225)",
+                          color: "white",
+                        }}
                       >
-                        Your day is a blank canvas
-                      </p>
-                      <p
-                        className="text-sm mt-1"
-                        style={{ color: "oklch(0.65 0.08 225)" }}
-                      >
-                        Add tasks to plan your productive day
-                      </p>
+                        <Plus className="w-4 h-4" />
+                      </Button>
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <AnimatePresence mode="popLayout">
-                        {dailyTasks.map((task, i) => (
-                          <motion.div
-                            key={task.description || i}
-                            initial={{ opacity: 0, x: -16 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 16, height: 0 }}
-                            transition={{ duration: 0.25 }}
-                            data-ocid={`daily.todo.item.${i + 1}`}
-                            className="flex items-center gap-3 p-3 rounded-xl group transition-all"
-                            style={{
-                              background: task.done
-                                ? "oklch(0.5 0.18 225 / 0.08)"
-                                : "oklch(0.96 0.018 225 / 0.5)",
-                              border: `1px solid ${task.done ? "oklch(0.6 0.15 225 / 0.25)" : "oklch(0.88 0.022 225 / 0.5)"}`,
-                            }}
-                          >
-                            <Checkbox
-                              data-ocid={
-                                i === 0 ? "daily.todo.checkbox.1" : undefined
-                              }
-                              checked={task.done}
-                              onCheckedChange={() => toggleTask(i)}
-                              id={`task-${i}`}
-                            />
-                            <label
-                              htmlFor={`task-${i}`}
-                              className="flex-1 text-sm cursor-pointer leading-snug"
+                    {dailyGoals.length === 0 ? (
+                      <div
+                        data-ocid="daily_goals.empty_state"
+                        className="text-center py-8 rounded-xl"
+                        style={{ background: "oklch(0.96 0.018 225 / 0.5)" }}
+                      >
+                        <p className="text-2xl mb-2">🎯</p>
+                        <p
+                          className="font-medium"
+                          style={{ color: "oklch(0.5 0.1 225)" }}
+                        >
+                          No goals yet — add one above!
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <AnimatePresence mode="popLayout">
+                          {dailyGoals.map((goal, i) => (
+                            <motion.div
+                              key={goal.id}
+                              initial={{ opacity: 0, x: -16 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: 16, height: 0 }}
+                              transition={{ duration: 0.25 }}
+                              data-ocid={`daily_goals.item.${i + 1}`}
+                              className="flex items-center gap-3 p-3 rounded-xl group transition-all"
                               style={{
-                                color: task.done
-                                  ? "oklch(0.6 0.1 225)"
-                                  : "oklch(0.28 0.04 75)",
-                                textDecoration: task.done
-                                  ? "line-through"
-                                  : "none",
-                                opacity: task.done ? 0.7 : 1,
+                                background: goal.done
+                                  ? "oklch(0.5 0.18 225 / 0.08)"
+                                  : "oklch(0.96 0.018 225 / 0.5)",
+                                border: `1px solid ${goal.done ? "oklch(0.6 0.15 225 / 0.25)" : "oklch(0.88 0.022 225 / 0.5)"}`,
                               }}
                             >
-                              {task.description}
-                            </label>
-                            <button
-                              type="button"
-                              data-ocid={
-                                i === 0
-                                  ? "daily.todo.delete_button.1"
-                                  : undefined
-                              }
-                              onClick={() => deleteTask(i)}
-                              className="opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-opacity"
-                              style={{ color: "oklch(0.58 0.2 25)" }}
-                              aria-label="Delete task"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  )}
-                  {dailyTasks.length > 0 && (
-                    <div className="pt-1 daily-progress">
-                      <Progress
-                        value={pct(
-                          dailyTasks.filter((t) => t.done).length,
-                          dailyTasks.length,
-                        )}
-                        className="h-2 rounded-full"
-                        style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
-                      />
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                              <Checkbox
+                                data-ocid={`daily_goals.checkbox.${i + 1}`}
+                                checked={goal.done}
+                                onCheckedChange={() => toggleDailyGoal(goal.id)}
+                                id={`goal-${goal.id}`}
+                              />
+                              <label
+                                htmlFor={`goal-${goal.id}`}
+                                className="flex-1 text-sm cursor-pointer leading-snug"
+                                style={{
+                                  color: goal.done
+                                    ? "oklch(0.6 0.1 225)"
+                                    : "oklch(0.28 0.04 75)",
+                                  textDecoration: goal.done
+                                    ? "line-through"
+                                    : "none",
+                                  opacity: goal.done ? 0.7 : 1,
+                                }}
+                              >
+                                {goal.text}
+                              </label>
+                              <button
+                                type="button"
+                                data-ocid={`daily_goals.delete_button.${i + 1}`}
+                                onClick={() => deleteDailyGoal(goal.id)}
+                                className="opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-opacity"
+                                style={{ color: "oklch(0.58 0.2 25)" }}
+                                aria-label="Delete goal"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </TabsContent>
 
-              {/* Daily Goals */}
-              <Card className="card-journal rounded-2xl border-0">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle
-                      className="font-display text-xl"
-                      style={{ color: "oklch(0.32 0.15 225)" }}
-                    >
-                      🎯 Daily Goals
-                    </CardTitle>
-                    <Badge
-                      className="rounded-full text-xs px-2.5"
-                      style={{
-                        background: "oklch(0.5 0.18 225 / 0.1)",
-                        color: "oklch(0.42 0.15 225)",
-                        border: "1px solid oklch(0.6 0.15 225 / 0.3)",
-                      }}
-                    >
-                      {dailyGoals.filter((g) => g.done).length}/
-                      {dailyGoals.length} done
-                    </Badge>
-                  </div>
-                  {dailyGoals.length > 0 && (
-                    <div className="mt-2">
-                      <Progress
-                        value={pct(
-                          dailyGoals.filter((g) => g.done).length,
-                          dailyGoals.length,
-                        )}
-                        className="h-2 rounded-full"
-                        style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
-                      />
-                    </div>
-                  )}
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex gap-2">
-                    <Input
-                      data-ocid="daily_goals.input"
-                      placeholder="Add a goal for today..."
-                      value={goalInput}
-                      onChange={(e) => setGoalInput(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addDailyGoal()}
-                      className="flex-1 rounded-xl border-0"
-                      style={{
-                        background: "oklch(0.94 0.022 225 / 0.5)",
-                        color: "oklch(0.25 0.05 225)",
-                      }}
-                    />
-                    <Button
-                      data-ocid="daily_goals.add_button"
-                      onClick={addDailyGoal}
-                      className="rounded-xl px-4 shrink-0"
-                      style={{
-                        background: "oklch(0.5 0.18 225)",
-                        color: "white",
-                      }}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  {dailyGoals.length === 0 ? (
-                    <div
-                      data-ocid="daily_goals.empty_state"
-                      className="text-center py-8 rounded-xl"
-                      style={{ background: "oklch(0.96 0.018 225 / 0.5)" }}
-                    >
-                      <p className="text-2xl mb-2">🎯</p>
-                      <p
-                        className="font-medium"
-                        style={{ color: "oklch(0.5 0.1 225)" }}
-                      >
-                        No goals yet — add one above!
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <AnimatePresence mode="popLayout">
-                        {dailyGoals.map((goal, i) => (
-                          <motion.div
-                            key={goal.id}
-                            initial={{ opacity: 0, x: -16 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 16, height: 0 }}
-                            transition={{ duration: 0.25 }}
-                            data-ocid={`daily_goals.item.${i + 1}`}
-                            className="flex items-center gap-3 p-3 rounded-xl group transition-all"
-                            style={{
-                              background: goal.done
-                                ? "oklch(0.5 0.18 225 / 0.08)"
-                                : "oklch(0.96 0.018 225 / 0.5)",
-                              border: `1px solid ${goal.done ? "oklch(0.6 0.15 225 / 0.25)" : "oklch(0.88 0.022 225 / 0.5)"}`,
-                            }}
-                          >
-                            <Checkbox
-                              data-ocid={`daily_goals.checkbox.${i + 1}`}
-                              checked={goal.done}
-                              onCheckedChange={() => toggleDailyGoal(goal.id)}
-                              id={`goal-${goal.id}`}
-                            />
-                            <label
-                              htmlFor={`goal-${goal.id}`}
-                              className="flex-1 text-sm cursor-pointer leading-snug"
-                              style={{
-                                color: goal.done
-                                  ? "oklch(0.6 0.1 225)"
-                                  : "oklch(0.28 0.04 75)",
-                                textDecoration: goal.done
-                                  ? "line-through"
-                                  : "none",
-                                opacity: goal.done ? 0.7 : 1,
-                              }}
-                            >
-                              {goal.text}
-                            </label>
-                            <button
-                              type="button"
-                              data-ocid={`daily_goals.delete_button.${i + 1}`}
-                              onClick={() => deleteDailyGoal(goal.id)}
-                              className="opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-opacity"
-                              style={{ color: "oklch(0.58 0.2 25)" }}
-                              aria-label="Delete goal"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-          </TabsContent>
-        </Tabs>
-      </main>
+            {/* ──────────────── CYCLE TAB ──────────────── */}
+            <TabsContent value="cycle" className="space-y-5 mt-6">
+              <CycleScreen />
+            </TabsContent>
+          </Tabs>
+        </main>
 
-      {/* ──────────────── ACHIEVEMENT BADGES ──────────────── */}
-      {!focusMode && (viewMode === "dashboard" || viewMode === "review") && (
-        <CollapsibleSection
-          id="achievements"
-          title="Achievements"
-          icon="🏆"
-          defaultOpen={false}
-        >
-          <EditableAchievements
-            riyalahStreak={riyalahStreak}
-            booksCompleted={checkedItems.mABooks.length}
-            certsCompleted={checkedItems.certificates.length}
-            studentsCount={students.length}
-          />
-        </CollapsibleSection>
-      )}
-
-      {/* ──────────────── MONTHLY WINS + MONTHLY REPORT ──────────────── */}
-      {!focusMode && (
-        <div className="grid gap-4 md:grid-cols-2 mb-6">
-          <MonthlyWins
-            booksCompleted={checkedItems.mABooks.length}
-            riyalahStreak={riyalahStreak}
-            incomeTotal={monthlyIncome}
-            certsCompleted={checkedItems.certificates.length}
-          />
-          <MonthlyReport
-            weeklyHoursTotal={totalWeeklyHours}
-            booksCompleted={checkedItems.mABooks.length}
-            certsCompleted={checkedItems.certificates.length}
-            incomeTotal={monthlyIncome}
-            riyalahPct={riyalahPct}
-          />
-        </div>
-      )}
-
-      {/* ──────────────── PERSONAL READING TRACKER ──────────────── */}
-      {!focusMode && <PersonalReadingTracker />}
-
-      {/* ──────────────── EMERGENCY RESET BUTTON ──────────────── */}
-      {!focusMode && <EmergencyResetButton />}
-
-      {/* ──────────────── VISION SECTION ──────────────── */}
-      {!focusMode && viewMode === "dashboard" && (
-        <CollapsibleSection
-          id="vision"
-          title="Vision Section"
-          icon="✨"
-          defaultOpen={false}
-        >
-          <VisionSection />
-        </CollapsibleSection>
-      )}
-
-      {/* ──────────────── FUTURE AYSHA MESSAGE ──────────────── */}
-      {!focusMode && viewMode === "dashboard" && <FutureAyshaMessage />}
-
-      {/* ──────────────── LIFE TIMELINE ──────────────── */}
-      {!focusMode && <LifeTimeline />}
-
-      {/* ──────────────── ACHIEVEMENT TIMELINE ──────────────── */}
-      {!focusMode && <AchievementTimeline />}
-      {/* Footer */}
-      <footer className="mt-12 pb-8 text-center">
-        <p className="text-sm" style={{ color: "oklch(0.6 0.02 75)" }}>
-          © {new Date().getFullYear()}. Built with ❤️ using{" "}
-          <a
-            href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline underline-offset-2 hover:opacity-80 transition-opacity"
-            style={{ color: "oklch(0.52 0.12 285)" }}
+        {/* ──────────────── ACHIEVEMENT BADGES ──────────────── */}
+        {!focusMode && (viewMode === "dashboard" || viewMode === "review") && (
+          <CollapsibleSection
+            id="achievements"
+            title="Achievements"
+            icon="🏆"
+            defaultOpen={false}
           >
-            caffeine.ai
-          </a>
-        </p>
-      </footer>
+            <EditableAchievements
+              riyalahStreak={riyalahStreak}
+              booksCompleted={checkedItems.mABooks.length}
+              certsCompleted={checkedItems.certificates.length}
+              studentsCount={students.length}
+            />
+          </CollapsibleSection>
+        )}
 
-      <Toaster position="bottom-right" richColors />
+        {/* ──────────────── MONTHLY WINS + MONTHLY REPORT ──────────────── */}
+        {!focusMode && (
+          <div className="grid gap-4 md:grid-cols-2 mb-6">
+            <MonthlyWins
+              booksCompleted={checkedItems.mABooks.length}
+              riyalahStreak={riyalahStreak}
+              incomeTotal={monthlyIncome}
+              certsCompleted={checkedItems.certificates.length}
+            />
+            <MonthlyReport
+              weeklyHoursTotal={totalWeeklyHours}
+              booksCompleted={checkedItems.mABooks.length}
+              certsCompleted={checkedItems.certificates.length}
+              incomeTotal={monthlyIncome}
+              riyalahPct={riyalahPct}
+            />
+          </div>
+        )}
+
+        {/* ──────────────── PERSONAL READING TRACKER ──────────────── */}
+        {!focusMode && <PersonalReadingTracker />}
+
+        {/* ──────────────── EMERGENCY RESET BUTTON ──────────────── */}
+        {!focusMode && <EmergencyResetButton />}
+
+        {/* ──────────────── VISION SECTION ──────────────── */}
+        {!focusMode && viewMode === "dashboard" && (
+          <CollapsibleSection
+            id="vision"
+            title="Vision Section"
+            icon="✨"
+            defaultOpen={false}
+          >
+            <VisionSection />
+          </CollapsibleSection>
+        )}
+
+        {/* ──────────────── FUTURE AYSHA MESSAGE ──────────────── */}
+        {!focusMode && viewMode === "dashboard" && <FutureAyshaMessage />}
+
+        {/* ──────────────── LIFE TIMELINE ──────────────── */}
+        {!focusMode && <LifeTimeline />}
+
+        {/* ──────────────── ACHIEVEMENT TIMELINE ──────────────── */}
+        {!focusMode && <AchievementTimeline />}
+        {/* Footer */}
+        <footer className="mt-12 pb-8 text-center">
+          <p className="text-sm" style={{ color: "oklch(0.6 0.02 75)" }}>
+            © {new Date().getFullYear()}. Built with ❤️ using{" "}
+            <a
+              href={`https://caffeine.ai?utm_source=caffeine-footer&utm_medium=referral&utm_content=${encodeURIComponent(window.location.hostname)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:opacity-80 transition-opacity"
+              style={{ color: "oklch(0.52 0.12 285)" }}
+            >
+              caffeine.ai
+            </a>
+          </p>
+        </footer>
+
+        <Toaster position="bottom-right" richColors />
+      </div>
     </div>
   );
 }

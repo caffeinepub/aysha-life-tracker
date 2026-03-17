@@ -1,0 +1,18 @@
+{
+  "name": "Aysha Life Tracker",
+  "short_name": "Life Tracker",
+  "description": "Personal productivity tracker for spiritual, academic, and career growth",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#7c3aed",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/assets/generated/app-icon.dim_512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,39 +1,24 @@
 # Aysha Life Tracker
 
 ## Current State
-A comprehensive personal productivity app with sections for MA Books, Riyalah streak, Study Hours, Daily Goals, Pomodoro Timer, Students, Habit Heatmap, Achievement Badges, Weekly Reflection, Focus Mode, and many more. All state is in localStorage via React useState/useEffect. Students section has a fixed list; achievements have default completed statuses; heatmap shows generic squares; Focus Mode partially hides sections; no view modes; no collapsible sections; no quick actions panel.
+App has a wrapper constrained to 412px wide / 915px tall on desktop (Samsung Galaxy A16 phone frame). Period calendar shows days with color coding but dates are not clickable — cannot mark period start/end by tapping a date.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Restart Week button**: clears weekly study hours + weekly goals, keeps long-term progress, shows toast "New week. Start fresh."
-- **Reset Weekly Data button** (Study Hours section): resets study hours to 0, weekly summary, today's tasks/goals — with confirmation dialog "Are you sure you want to reset this week?"
-- **Full Reset button** (settings/top): clears all trackers (study, riyalah, goals, planner, income, achievements), keeps structure — with warning dialog "This will clear all your progress. This cannot be undone."
-- **Dynamic Students section**: Add Student button with form (Name, Subject, Notes, Class Frequency); each student card has Edit, Delete, session counter (+), active/inactive toggle, Next Class field; remove fixed students list
-- **Improved Habit Heatmap**: show actual date numbers on boxes, highlight today, show month name, prev/next month navigation, click a date to show that day's details (study hours, riyalah completion, tasks)
-- **Quick Actions panel**: floating or top panel with buttons: + Add Task, + Add Study Time, + Add Student, + Mark Riyalah Done
-- **View Mode toggles**: Dashboard, Focus, Deep Work (study+timer only), Review (weekly summary+reflection) — buttons at top
-- **Collapsible sections**: all sections can expand/collapse; default only main sections open
-- **Motivational message** in achievements: "Missed a day? Missed a week? Start again. That's the system."
+- Calendar dates in CycleScreen are now clickable: tapping a date opens a small flow picker (Spotting / Light / Medium / Heavy) and marks it as a period day, saving to periodLogs and periodEvents.
+- If the date already has a period event, clicking it removes it (toggle off).
+- Show a small indicator (dot or ring) on dates that have been manually marked.
 
 ### Modify
-- **Achievements**: remove default completed status (start empty); add Edit/Delete per achievement; add custom achievement creation; mark complete/incomplete; auto-unlock: 1 MA book → "First MA Book", 5 students → "5 Students Reached", 7-day riyalah → streak badge
-- **Focus Mode**: when ON show ONLY Today's Focus, Today's 3 Wins, Pomodoro Timer; hide ALL other sections; centered clean layout; message "Focus Mode — Do only what matters."
-- **Mobile layout**: stack vertically, reduce spacing, bigger tap targets, reduce card sizes/padding, consistent colors, fewer gradients
+- Remove phone-frame sizing constraints: change wrapper from `md:max-w-[412px] md:max-h-[915px] md:overflow-y-auto md:rounded-[40px] md:shadow-2xl md:my-4` to a normal responsive layout (`max-w-2xl mx-auto` or similar) so the app fills the screen naturally like before the Galaxy A16 optimization.
 
 ### Remove
-- Fixed/hardcoded students list
-- Default completed status on achievements
+- Phone-frame CSS constraints (412px width cap, 915px height cap, rounded-[40px], overflow-y-auto on the wrapper).
 
 ## Implementation Plan
-1. Add view mode state (dashboard/focus/deepwork/review) with toggle buttons at top
-2. Make all sections collapsible with expand/collapse state (localStorage persisted)
-3. Rewrite Students section as fully dynamic (add/edit/delete with form, class frequency, next class, active toggle)
-4. Rewrite Achievements section (no default completed, add/edit/delete, custom, auto-unlock logic)
-5. Add Restart Week button with toast
-6. Add Reset Weekly Data button with confirmation dialog in Study Hours section
-7. Add Full Reset button with warning dialog in header/settings area
-8. Improve Habit Heatmap (dates, today highlight, month nav, click to view day details)
-9. Add Quick Actions panel
-10. Improve Focus Mode (show only 3 sections, center layout, message)
-11. Mobile layout improvements (responsive, compact, bigger buttons)
+1. Update the main wrapper div classes to remove Galaxy A16 phone-frame constraints; use a normal full-width responsive layout.
+2. In CycleScreen calendar, make each day cell a `<button>` with onClick.
+3. On click: if date is already a period day, remove it from periodLogs/periodEvents. If not, show an inline flow picker (small pill buttons) for that date, then on flow selection, add to periodLogs and periodEvents as a start event.
+4. Persist changes to localStorage.
+5. Show a small dot on marked period dates in the calendar.
