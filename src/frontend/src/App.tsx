@@ -26,13 +26,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { CheckedItems, Task } from "./backend.d";
 import {
-  AchievementBadges,
+  CollapsibleSection,
+  DynamicStudentsSection,
+  EditableAchievements,
+  FullResetButton,
+  ImprovedHabitHeatmap,
+  QuickActionsPanel,
+  ResetWeeklyDataButton,
+  RestartWeekButton,
+  type ViewMode,
+  ViewModeBar,
+} from "./components/EnhancedFeatures";
+import {
   AchievementTimeline,
   EmergencyResetButton,
   EnergyMoodTracker,
   ExamPrepMeter,
   FutureAyshaMessage,
-  HabitHeatmap,
   LifeBalanceWheel,
   LifeProgressBar,
   LifeTimeline,
@@ -325,7 +335,7 @@ function AppContent() {
   const [certificates, setCertificates] = useState<string[]>(INIT_CERTIFICATES);
   const [riyalah, setRiyalah] = useState<string[]>(INIT_RIYALAH);
   const [netPrep, setNetPrep] = useState<string[]>(INIT_NET_PREP);
-  const [students, setStudents] = useState<string[]>(INIT_STUDENTS);
+  const [students, _setStudents] = useState<string[]>(INIT_STUDENTS);
   const [editingItem, setEditingItem] = useState<{
     section: string;
     index: number;
@@ -357,12 +367,6 @@ function AppContent() {
     return localStorage.getItem("riyalah_streak_date") ?? "";
   });
 
-  // Student session/notes state
-  const [studentSessions, setStudentSessions] = useState<
-    Record<string, number>
-  >({});
-  const [studentNotes, setStudentNotes] = useState<Record<string, string>>({});
-
   // Daily goals state
   const [dailyGoals, setDailyGoals] = useState<
     { id: string; text: string; done: boolean }[]
@@ -393,8 +397,17 @@ function AppContent() {
     }
   });
 
-  // Focus Mode
+  // Focus Mode / View Mode
   const [focusMode, setFocusMode] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    return (localStorage.getItem("view_mode") as ViewMode) ?? "dashboard";
+  });
+  const handleViewModeChange = (m: ViewMode) => {
+    setViewMode(m);
+    localStorage.setItem("view_mode", m);
+    if (m === "focus") setFocusMode(true);
+    else setFocusMode(false);
+  };
 
   // MA Exam Countdown
   const [examDate, setExamDate] = useState<string>(() => {
@@ -741,6 +754,25 @@ function AppContent() {
     0,
   );
 
+  const restartWeek = () => {
+    const zeroed = Object.fromEntries(DAYS_OF_WEEK.map((d) => [d, 0]));
+    setWeeklyHours(zeroed);
+    localStorage.setItem("weekly_hours", JSON.stringify(zeroed));
+    setDailyGoals([]);
+    localStorage.setItem("daily_goals", JSON.stringify([]));
+    toast.success("New week. Start fresh.", { duration: 3000 });
+  };
+
+  const resetWeeklyData = () => {
+    const zeroed = Object.fromEntries(DAYS_OF_WEEK.map((d) => [d, 0]));
+    setWeeklyHours(zeroed);
+    localStorage.setItem("weekly_hours", JSON.stringify(zeroed));
+    setDailyTasks([]);
+    setDailyGoals([]);
+    localStorage.setItem("daily_goals", JSON.stringify([]));
+    toast.success("Weekly data reset.", { duration: 2000 });
+  };
+
   const addStudyMinutes = () => {
     const mins = Number(addMinutesInput);
     if (!mins || mins <= 0) return;
@@ -888,6 +920,12 @@ function AppContent() {
               {focusMode ? "Exit Focus Mode" : "⚡ Focus Mode"}
             </button>
           </div>
+          {/* Full Reset + Restart Week */}
+          <div className="absolute top-14 left-4 flex gap-2">
+            <RestartWeekButton onRestart={restartWeek} />
+            <FullResetButton />
+          </div>
+
           {/* Dark mode toggle */}
           <div className="absolute top-4 right-4">
             <button
@@ -959,7 +997,41 @@ function AppContent() {
       </header>
 
       {/* Main content */}
-      <main className="container mx-auto px-4 py-8 max-w-5xl">
+      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-6 max-w-5xl">
+        {/* View Mode Bar */}
+        {!focusMode && (
+          <ViewModeBar mode={viewMode} onChange={handleViewModeChange} />
+        )}
+        {/* Quick Actions */}
+        {!focusMode && viewMode === "dashboard" && (
+          <QuickActionsPanel
+            onAddTask={() => {
+              const input = document.querySelector<HTMLInputElement>(
+                "[data-ocid='daily.todo.input']",
+              );
+              if (input) {
+                input.focus();
+                input.scrollIntoView({ behavior: "smooth" });
+              }
+            }}
+            onAddStudyTime={() => {
+              const input = document.querySelector<HTMLInputElement>(
+                "[data-ocid='study_hours.add_input']",
+              );
+              if (input) {
+                input.focus();
+                input.scrollIntoView({ behavior: "smooth" });
+              }
+            }}
+            onAddStudent={() => {
+              const btn = document.querySelector<HTMLButtonElement>(
+                "[data-ocid='students.add_button']",
+              );
+              btn?.click();
+            }}
+            onMarkRiyalah={handleMarkStreakToday}
+          />
+        )}
         {/* ──────────────── LIFE PROGRESS BAR ──────────────── */}
         {!focusMode && (
           <LifeProgressBar
@@ -1367,18 +1439,34 @@ function AppContent() {
         )}
 
         {/* ──────────────── LIFE BALANCE WHEEL + EXAM PREP ──────────────── */}
-        {!focusMode && (
-          <div className="grid gap-4 md:grid-cols-2 mb-6">
-            <LifeBalanceWheel />
-            <ExamPrepMeter />
-          </div>
+        {!focusMode && viewMode === "dashboard" && (
+          <CollapsibleSection
+            id="balance"
+            title="Life Balance & Exam Prep"
+            icon="⚖️"
+            defaultOpen={false}
+          >
+            <div className="grid gap-4 md:grid-cols-2 mb-6">
+              <LifeBalanceWheel />
+              <ExamPrepMeter />
+            </div>
+          </CollapsibleSection>
         )}
 
         {/* ──────────────── HABIT HEATMAP ──────────────── */}
-        {!focusMode && <HabitHeatmap />}
+        {!focusMode && (viewMode === "dashboard" || viewMode === "review") && (
+          <CollapsibleSection
+            id="heatmap"
+            title="Habit Heatmap"
+            icon="📅"
+            defaultOpen={false}
+          >
+            <ImprovedHabitHeatmap />
+          </CollapsibleSection>
+        )}
 
         {/* ──────────────── SMART WEEKLY REVIEW + WEEKLY REFLECTION ──────────────── */}
-        {!focusMode && (
+        {!focusMode && (viewMode === "dashboard" || viewMode === "review") && (
           <div className="grid gap-4 md:grid-cols-2 mb-6">
             <SmartWeeklyReview
               weeklyHoursTotal={totalWeeklyHours}
@@ -1393,136 +1481,168 @@ function AppContent() {
         {/* ──────────────── WEEKLY PLANNING BOARD ──────────────── */}
         {!focusMode && <WeeklyPlanningBoard />}
         {/* ──────────────── STUDY HOURS + WINS ──────────────── */}
-        {!focusMode && (
-          <div className="grid gap-4 md:grid-cols-2 mb-6">
-            {/* Study Hours This Week */}
-            <div
-              data-ocid="study_hours.card"
-              className="rounded-2xl p-5"
-              style={{
-                background:
-                  "linear-gradient(135deg, oklch(0.96 0.03 225), oklch(0.93 0.04 215))",
-                border: "1px solid oklch(0.85 0.04 225 / 0.5)",
-              }}
-            >
+        {!focusMode &&
+          (viewMode === "dashboard" || viewMode === "deepwork") && (
+            <div className="grid gap-4 md:grid-cols-2 mb-6">
+              {/* Study Hours This Week */}
               <div
-                className="font-display font-semibold text-base mb-3"
-                style={{ color: "oklch(0.35 0.14 225)" }}
+                data-ocid="study_hours.card"
+                className="rounded-2xl p-5"
+                style={{
+                  background:
+                    "linear-gradient(135deg, oklch(0.96 0.03 225), oklch(0.93 0.04 215))",
+                  border: "1px solid oklch(0.85 0.04 225 / 0.5)",
+                }}
               >
-                📊 Study Hours This Week
-              </div>
-              <div className="space-y-1.5 mb-3">
-                {DAYS_OF_WEEK.map((day) => {
-                  const hours = weeklyHours[day] || 0;
-                  const maxH = Math.max(...Object.values(weeklyHours), 1);
-                  return (
-                    <div key={day} className="flex items-center gap-2">
-                      <span
-                        className="text-xs w-7 shrink-0 font-medium"
-                        style={{ color: "oklch(0.48 0.12 225)" }}
-                      >
-                        {day}
-                      </span>
-                      <div
-                        className="flex-1 h-3 rounded-full overflow-hidden"
-                        style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
-                      >
-                        <div
-                          className="h-full rounded-full transition-all"
-                          style={{
-                            width: `${(hours / maxH) * 100}%`,
-                            background:
-                              day === todayDayKey
-                                ? "linear-gradient(90deg, oklch(0.5 0.18 225), oklch(0.6 0.16 200))"
-                                : "oklch(0.65 0.12 225 / 0.7)",
-                          }}
-                        />
-                      </div>
-                      <span
-                        className="text-xs w-8 text-right shrink-0"
-                        style={{ color: "oklch(0.5 0.1 225)" }}
-                      >
-                        {hours >= 1
-                          ? `${hours.toFixed(1)}h`
-                          : `${Math.round(hours * 60)}m`}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  data-ocid="study_hours.add_input"
-                  type="number"
-                  placeholder="Add minutes"
-                  value={addMinutesInput}
-                  onChange={(e) => setAddMinutesInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addStudyMinutes()}
-                  className="flex-1 rounded-xl border-0 text-sm h-8"
-                  style={{
-                    background: "oklch(0.9 0.025 225 / 0.5)",
-                    color: "oklch(0.28 0.08 225)",
-                  }}
-                />
-                <Button
-                  data-ocid="study_hours.add_button"
-                  onClick={addStudyMinutes}
-                  className="h-8 px-3 rounded-xl text-xs"
-                  style={{ background: "oklch(0.5 0.18 225)", color: "white" }}
-                >
-                  + Add
-                </Button>
-              </div>
-            </div>
-
-            {/* Today's 3 Wins */}
-            <div
-              data-ocid="wins.card"
-              className="rounded-2xl p-5"
-              style={{
-                background:
-                  "linear-gradient(135deg, oklch(0.97 0.03 55), oklch(0.94 0.04 45))",
-                border: "1px solid oklch(0.86 0.05 55 / 0.5)",
-              }}
-            >
-              <div className="flex items-center gap-2 mb-3">
-                <Trophy
-                  className="w-5 h-5"
-                  style={{ color: "oklch(0.58 0.2 55)" }}
-                />
-                <span
-                  className="font-display font-semibold text-base"
-                  style={{ color: "oklch(0.38 0.14 55)" }}
-                >
-                  Today&apos;s 3 Wins
-                </span>
-              </div>
-              <div className="space-y-2.5">
-                {wins.map((win, i) => (
+                <div className="flex items-center justify-between mb-3">
                   <div
-                    key={`win-${win.label}-${i}`}
-                    data-ocid={`wins.item.${i + 1}`}
-                    className="flex items-center gap-3"
+                    className="font-display font-semibold text-base"
+                    style={{ color: "oklch(0.35 0.14 225)" }}
                   >
-                    <Checkbox
-                      data-ocid={`wins.checkbox.${i + 1}`}
-                      checked={win.done}
-                      onCheckedChange={() =>
-                        saveWins(
-                          wins.map((w, idx) =>
-                            idx === i ? { ...w, done: !w.done } : w,
-                          ),
-                        )
-                      }
-                      id={`win-${i}`}
-                    />
-                    {editingWinIdx === i ? (
-                      <div className="flex gap-1.5 flex-1">
-                        <Input
-                          value={editingWinLabel}
-                          onChange={(e) => setEditingWinLabel(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
+                    📊 Study Hours This Week
+                  </div>
+                  <ResetWeeklyDataButton onReset={resetWeeklyData} />
+                </div>
+                <div className="space-y-1.5 mb-3">
+                  {DAYS_OF_WEEK.map((day) => {
+                    const hours = weeklyHours[day] || 0;
+                    const maxH = Math.max(...Object.values(weeklyHours), 1);
+                    return (
+                      <div key={day} className="flex items-center gap-2">
+                        <span
+                          className="text-xs w-7 shrink-0 font-medium"
+                          style={{ color: "oklch(0.48 0.12 225)" }}
+                        >
+                          {day}
+                        </span>
+                        <div
+                          className="flex-1 h-3 rounded-full overflow-hidden"
+                          style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
+                        >
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${(hours / maxH) * 100}%`,
+                              background:
+                                day === todayDayKey
+                                  ? "linear-gradient(90deg, oklch(0.5 0.18 225), oklch(0.6 0.16 200))"
+                                  : "oklch(0.65 0.12 225 / 0.7)",
+                            }}
+                          />
+                        </div>
+                        <span
+                          className="text-xs w-8 text-right shrink-0"
+                          style={{ color: "oklch(0.5 0.1 225)" }}
+                        >
+                          {hours >= 1
+                            ? `${hours.toFixed(1)}h`
+                            : `${Math.round(hours * 60)}m`}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    data-ocid="study_hours.add_input"
+                    type="number"
+                    placeholder="Add minutes"
+                    value={addMinutesInput}
+                    onChange={(e) => setAddMinutesInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && addStudyMinutes()}
+                    className="flex-1 rounded-xl border-0 text-sm h-8"
+                    style={{
+                      background: "oklch(0.9 0.025 225 / 0.5)",
+                      color: "oklch(0.28 0.08 225)",
+                    }}
+                  />
+                  <Button
+                    data-ocid="study_hours.add_button"
+                    onClick={addStudyMinutes}
+                    className="h-8 px-3 rounded-xl text-xs"
+                    style={{
+                      background: "oklch(0.5 0.18 225)",
+                      color: "white",
+                    }}
+                  >
+                    + Add
+                  </Button>
+                </div>
+              </div>
+
+              {/* Today's 3 Wins */}
+              <div
+                data-ocid="wins.card"
+                className="rounded-2xl p-5"
+                style={{
+                  background:
+                    "linear-gradient(135deg, oklch(0.97 0.03 55), oklch(0.94 0.04 45))",
+                  border: "1px solid oklch(0.86 0.05 55 / 0.5)",
+                }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <Trophy
+                    className="w-5 h-5"
+                    style={{ color: "oklch(0.58 0.2 55)" }}
+                  />
+                  <span
+                    className="font-display font-semibold text-base"
+                    style={{ color: "oklch(0.38 0.14 55)" }}
+                  >
+                    Today&apos;s 3 Wins
+                  </span>
+                </div>
+                <div className="space-y-2.5">
+                  {wins.map((win, i) => (
+                    <div
+                      key={`win-${win.label}-${i}`}
+                      data-ocid={`wins.item.${i + 1}`}
+                      className="flex items-center gap-3"
+                    >
+                      <Checkbox
+                        data-ocid={`wins.checkbox.${i + 1}`}
+                        checked={win.done}
+                        onCheckedChange={() =>
+                          saveWins(
+                            wins.map((w, idx) =>
+                              idx === i ? { ...w, done: !w.done } : w,
+                            ),
+                          )
+                        }
+                        id={`win-${i}`}
+                      />
+                      {editingWinIdx === i ? (
+                        <div className="flex gap-1.5 flex-1">
+                          <Input
+                            value={editingWinLabel}
+                            onChange={(e) => setEditingWinLabel(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                saveWins(
+                                  wins.map((w, idx) =>
+                                    idx === i
+                                      ? {
+                                          ...w,
+                                          label:
+                                            editingWinLabel.trim() || w.label,
+                                        }
+                                      : w,
+                                  ),
+                                );
+                                setEditingWinIdx(null);
+                              }
+                              if (e.key === "Escape") setEditingWinIdx(null);
+                            }}
+                            autoFocus
+                            className="flex-1 rounded-lg border-0 h-7 text-sm"
+                            style={{
+                              background: "oklch(0.9 0.03 55 / 0.5)",
+                              color: "oklch(0.3 0.1 55)",
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
                               saveWins(
                                 wins.map((w, idx) =>
                                   idx === i
@@ -1535,75 +1655,51 @@ function AppContent() {
                                 ),
                               );
                               setEditingWinIdx(null);
-                            }
-                            if (e.key === "Escape") setEditingWinIdx(null);
-                          }}
-                          autoFocus
-                          className="flex-1 rounded-lg border-0 h-7 text-sm"
+                            }}
+                            className="px-2 rounded-lg text-xs"
+                            style={{
+                              background: "oklch(0.5 0.16 150)",
+                              color: "white",
+                            }}
+                          >
+                            ✓
+                          </button>
+                        </div>
+                      ) : (
+                        <label
+                          htmlFor={`win-${i}`}
+                          className="flex-1 text-sm cursor-pointer"
                           style={{
-                            background: "oklch(0.9 0.03 55 / 0.5)",
-                            color: "oklch(0.3 0.1 55)",
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            saveWins(
-                              wins.map((w, idx) =>
-                                idx === i
-                                  ? {
-                                      ...w,
-                                      label: editingWinLabel.trim() || w.label,
-                                    }
-                                  : w,
-                              ),
-                            );
-                            setEditingWinIdx(null);
-                          }}
-                          className="px-2 rounded-lg text-xs"
-                          style={{
-                            background: "oklch(0.5 0.16 150)",
-                            color: "white",
+                            color: win.done
+                              ? "oklch(0.62 0.1 55)"
+                              : "oklch(0.35 0.1 55)",
+                            textDecoration: win.done ? "line-through" : "none",
                           }}
                         >
-                          ✓
-                        </button>
-                      </div>
-                    ) : (
-                      <label
-                        htmlFor={`win-${i}`}
-                        className="flex-1 text-sm cursor-pointer"
-                        style={{
-                          color: win.done
-                            ? "oklch(0.62 0.1 55)"
-                            : "oklch(0.35 0.1 55)",
-                          textDecoration: win.done ? "line-through" : "none",
+                          {win.label}
+                        </label>
+                      )}
+                      <button
+                        type="button"
+                        data-ocid={`wins.edit_button.${i + 1}`}
+                        onClick={() => {
+                          setEditingWinIdx(i);
+                          setEditingWinLabel(win.label);
                         }}
+                        className="p-1 rounded opacity-60 hover:opacity-100"
+                        style={{ color: "oklch(0.55 0.12 55)" }}
                       >
-                        {win.label}
-                      </label>
-                    )}
-                    <button
-                      type="button"
-                      data-ocid={`wins.edit_button.${i + 1}`}
-                      onClick={() => {
-                        setEditingWinIdx(i);
-                        setEditingWinLabel(win.label);
-                      }}
-                      className="p-1 rounded opacity-60 hover:opacity-100"
-                      style={{ color: "oklch(0.55 0.12 55)" }}
-                    >
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* ──────────────── RIYALAH STREAK CARD ──────────────── */}
-        {!focusMode && (
+        {!focusMode && viewMode === "dashboard" && (
           <div
             data-ocid="riyalah_streak.card"
             className="rounded-2xl p-5 mb-6"
@@ -1686,7 +1782,23 @@ function AppContent() {
           </div>
         )}
 
-        <Tabs defaultValue="spiritual" className="space-y-6">
+        {viewMode === "deepwork" && !focusMode && (
+          <div
+            data-ocid="deepwork.banner"
+            className="mb-4 p-3 rounded-xl text-center text-sm font-semibold"
+            style={{
+              background: "oklch(0.5 0.18 225 / 0.1)",
+              color: "oklch(0.42 0.15 225)",
+              border: "1px solid oklch(0.6 0.15 225 / 0.2)",
+            }}
+          >
+            📚 Deep Work Mode — Study + Timer only
+          </div>
+        )}
+        <Tabs
+          defaultValue={viewMode === "deepwork" ? "daily" : "spiritual"}
+          className="space-y-6"
+        >
           <TabsList
             className="grid grid-cols-4 gap-1 p-1 h-auto rounded-2xl"
             style={{
@@ -2446,905 +2558,163 @@ function AppContent() {
               transition={{ duration: 0.4 }}
               className="grid gap-5 md:grid-cols-2"
             >
-              {/* Students Goal */}
+              {/* Dynamic Students */}
+              <DynamicStudentsSection onChange={() => {}} />
+              {/* Tuition Income Tracker */}
               <Card className="card-journal rounded-2xl border-0">
                 <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle
-                      className="font-display text-xl"
-                      style={{ color: "oklch(0.38 0.16 50)" }}
-                    >
-                      👩‍🏫 Students Goal
-                    </CardTitle>
-                    <Badge
-                      className="rounded-full text-xs px-2.5"
-                      style={{
-                        background: "oklch(0.55 0.18 50 / 0.12)",
-                        color: "oklch(0.45 0.16 50)",
-                        border: "1px solid oklch(0.65 0.15 55 / 0.3)",
-                      }}
-                    >
-                      {checkedItems.students.length}/{students.length}
-                    </Badge>
-                  </div>
-                  <div className="mt-2 career-progress">
-                    <Progress
-                      value={pct(checkedItems.students.length, students.length)}
-                      className="h-2.5 rounded-full"
-                      style={{ background: "oklch(0.88 0.03 55 / 0.4)" }}
-                    />
-                    <p
-                      className="text-xs mt-1.5"
-                      style={{ color: "oklch(0.58 0.1 55)" }}
-                    >
-                      {checkedItems.students.length} students enrolled
-                    </p>
-                  </div>
+                  <CardTitle
+                    className="font-display text-xl"
+                    style={{ color: "oklch(0.38 0.16 50)" }}
+                  >
+                    💰 Tuition Income
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-2">
-                  {students.map((student, i) => {
-                    const checked = checkedItems.students.includes(student);
-                    const isEditing =
-                      editingItem?.section === "students" &&
-                      editingItem.index === i;
-                    const initials = student
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase();
-                    return (
-                      <motion.div
-                        key={`student-${student}`}
-                        initial={{ opacity: 0, y: 16 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{
-                          delay: i * 0.07,
-                          duration: 0.4,
-                          ease: "easeOut",
-                        }}
-                        className="group p-3 rounded-xl transition-all space-y-2"
+                <CardContent className="space-y-3">
+                  <div className="space-y-2">
+                    <Input
+                      data-ocid="income.label_input"
+                      placeholder="Income source (e.g. Naithan)"
+                      value={incomeEntryLabel}
+                      onChange={(e) => setIncomeEntryLabel(e.target.value)}
+                      onKeyDown={(e) =>
+                        e.key === "Enter" && handleAddIncomeEntry()
+                      }
+                      className="rounded-xl border-0"
+                      style={{
+                        background: "oklch(0.95 0.02 60)",
+                        color: "oklch(0.25 0.04 60)",
+                      }}
+                    />
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="text-xl font-bold px-3 py-2 rounded-lg"
                         style={{
-                          background: checked
-                            ? "oklch(0.55 0.18 50 / 0.1)"
-                            : "oklch(0.96 0.02 60)",
-                          border: `1px solid ${checked ? "oklch(0.65 0.15 55 / 0.35)" : "oklch(0.88 0.025 60 / 0.6)"}`,
+                          background: "oklch(0.92 0.04 60)",
+                          color: "oklch(0.42 0.14 50)",
                         }}
                       >
-                        <div className="flex items-center gap-3">
-                          <Checkbox
-                            id={`student-${i}`}
-                            data-ocid={`career.students.checkbox.${i + 1}`}
-                            checked={checked}
-                            onCheckedChange={() =>
-                              toggleCheck("students", student)
-                            }
-                          />
-                          <div
-                            className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                            style={{
-                              background: checked
-                                ? "oklch(0.65 0.18 50 / 0.25)"
-                                : "oklch(0.82 0.06 55 / 0.5)",
-                              color: "oklch(0.42 0.14 50)",
-                            }}
-                          >
-                            {initials}
-                          </div>
-                          {isEditing ? (
-                            <Input
-                              data-ocid={`students.item.input.${i + 1}`}
-                              autoFocus
-                              value={editingItem.value}
-                              onChange={(e) =>
-                                setEditingItem({
-                                  ...editingItem,
-                                  value: e.target.value,
-                                })
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter")
-                                  renameItem(
-                                    "students",
-                                    i,
-                                    editingItem.value,
-                                    setStudents,
-                                    "students",
-                                    student,
-                                  );
-                                if (e.key === "Escape") setEditingItem(null);
-                              }}
-                              onBlur={() =>
-                                renameItem(
-                                  "students",
-                                  i,
-                                  editingItem.value,
-                                  setStudents,
-                                  "students",
-                                  student,
-                                )
-                              }
-                              className="h-7 text-sm flex-1 bg-transparent border-b border-t-0 border-l-0 border-r-0 rounded-none focus-visible:ring-0 px-1"
-                              style={{ color: "oklch(0.28 0.02 75)" }}
-                            />
-                          ) : (
-                            <label
-                              htmlFor={`student-${i}`}
-                              className="font-medium text-sm flex-1 cursor-pointer"
-                              style={{
-                                color: checked
-                                  ? "oklch(0.55 0.14 50)"
-                                  : "oklch(0.28 0.02 75)",
-                                textDecoration: checked
-                                  ? "line-through"
-                                  : "none",
-                                opacity: checked ? 0.7 : 1,
-                              }}
-                            >
-                              {student}
-                            </label>
-                          )}
-                          {!isEditing && checked && (
-                            <span
-                              className="text-xs font-medium"
-                              style={{ color: "oklch(0.62 0.16 50)" }}
-                            >
-                              Active ✓
-                            </span>
-                          )}
-                          {!isEditing && (
-                            <button
-                              type="button"
-                              data-ocid={`students.item.edit_button.${i + 1}`}
-                              onClick={() =>
-                                setEditingItem({
-                                  section: "students",
-                                  index: i,
-                                  value: student,
-                                })
-                              }
-                              className="opacity-0 group-hover:opacity-100 transition-opacity ml-auto p-1 rounded flex-shrink-0"
-                              style={{ color: "oklch(0.55 0.1 50)" }}
-                            >
-                              <Pencil size={14} />
-                            </button>
-                          )}
-                        </div>
-                        {/* Session counter and notes */}
-                        <div className="flex items-center gap-2 pl-11">
-                          <div
-                            className="flex items-center gap-1.5 px-2 py-1 rounded-lg"
-                            style={{ background: "oklch(0.88 0.04 55 / 0.5)" }}
-                          >
-                            <span
-                              className="text-xs font-medium"
-                              style={{ color: "oklch(0.45 0.14 55)" }}
-                            >
-                              Sessions: {studentSessions[student] ?? 0}
-                            </span>
-                            <button
-                              type="button"
-                              data-ocid={`students.session_button.${i + 1}`}
-                              onClick={() =>
-                                setStudentSessions((prev) => ({
-                                  ...prev,
-                                  [student]: (prev[student] ?? 0) + 1,
-                                }))
-                              }
-                              className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-colors"
-                              style={{
-                                background: "oklch(0.62 0.16 50)",
-                                color: "white",
-                              }}
-                            >
-                              +
-                            </button>
-                          </div>
-                          <Input
-                            data-ocid={`students.notes.input.${i + 1}`}
-                            placeholder="Subject or notes..."
-                            value={studentNotes[student] ?? ""}
-                            onChange={(e) =>
-                              setStudentNotes((prev) => ({
-                                ...prev,
-                                [student]: e.target.value,
-                              }))
-                            }
-                            className="h-7 text-xs flex-1 rounded-lg border-0"
-                            style={{
-                              background: "oklch(0.92 0.02 60 / 0.8)",
-                              color: "oklch(0.32 0.08 55)",
-                            }}
-                          />
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-
-              {/* Income Tracker */}
-              <div className="space-y-4">
-                <Card className="card-journal rounded-2xl border-0 overflow-hidden">
-                  <CardHeader
-                    className="pb-3"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, oklch(0.96 0.03 60), oklch(0.94 0.04 50))",
-                    }}
-                  >
-                    <CardTitle
-                      className="font-display text-xl"
-                      style={{ color: "oklch(0.38 0.16 50)" }}
-                    >
-                      💰 Tuition Income Tracker
-                    </CardTitle>
-                    <p
-                      className="text-sm"
-                      style={{ color: "oklch(0.55 0.1 55)" }}
-                    >
-                      Monthly earnings from tutoring
-                    </p>
-                  </CardHeader>
-                  <CardContent className="space-y-4 pt-4">
-                    {/* Add income entry */}
-                    <div className="space-y-2">
+                        ₹
+                      </span>
                       <Input
-                        data-ocid="income.label_input"
-                        type="text"
-                        placeholder="Income source (e.g. Student Name)"
-                        value={incomeEntryLabel}
-                        onChange={(e) => setIncomeEntryLabel(e.target.value)}
-                        className="rounded-xl border-0 text-base"
+                        data-ocid="income.amount_input"
+                        type="number"
+                        placeholder="Amount"
+                        value={incomeEntryAmount}
+                        onChange={(e) => setIncomeEntryAmount(e.target.value)}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && handleAddIncomeEntry()
+                        }
+                        className="flex-1 rounded-xl border-0 text-base font-medium"
                         style={{
                           background: "oklch(0.95 0.02 60)",
                           color: "oklch(0.25 0.04 60)",
                         }}
                       />
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="text-xl font-bold px-3 py-2 rounded-lg"
-                          style={{
-                            background: "oklch(0.92 0.04 60)",
-                            color: "oklch(0.42 0.14 50)",
-                          }}
-                        >
-                          ₹
-                        </span>
-                        <Input
-                          data-ocid="income.amount_input"
-                          type="number"
-                          placeholder="Amount"
-                          value={incomeEntryAmount}
-                          onChange={(e) => setIncomeEntryAmount(e.target.value)}
-                          onKeyDown={(e) =>
-                            e.key === "Enter" && handleAddIncomeEntry()
-                          }
-                          className="flex-1 rounded-xl border-0 text-base font-medium"
-                          style={{
-                            background: "oklch(0.95 0.02 60)",
-                            color: "oklch(0.25 0.04 60)",
-                          }}
-                        />
-                        <Button
-                          data-ocid="income.add_button"
-                          onClick={handleAddIncomeEntry}
-                          className="rounded-xl px-4 font-semibold"
-                          style={{
-                            background: "oklch(0.62 0.18 50)",
-                            color: "white",
-                          }}
-                        >
-                          Add
-                        </Button>
-                      </div>
+                      <Button
+                        data-ocid="income.add_button"
+                        onClick={handleAddIncomeEntry}
+                        className="rounded-xl px-4 font-semibold"
+                        style={{
+                          background: "oklch(0.62 0.18 50)",
+                          color: "white",
+                        }}
+                      >
+                        Add
+                      </Button>
                     </div>
-
-                    {/* Income entries list */}
-                    {incomeEntries.length > 0 && (
-                      <div className="space-y-2">
-                        {incomeEntries.map((entry, idx) => (
-                          <div
-                            key={`${entry.label}-${entry.amount}-${idx}`}
-                            data-ocid={`income.item.${idx + 1}`}
-                            className="flex items-center justify-between px-3 py-2 rounded-xl"
-                            style={{
-                              background: "oklch(0.94 0.03 60 / 0.7)",
-                              border: "1px solid oklch(0.85 0.06 55 / 0.3)",
-                            }}
+                  </div>
+                  {incomeEntries.length > 0 && (
+                    <div className="space-y-2">
+                      {incomeEntries.map((entry, idx) => (
+                        <div
+                          key={`${entry.label}-${idx}`}
+                          data-ocid={`income.item.${idx + 1}`}
+                          className="flex items-center justify-between px-3 py-2 rounded-xl"
+                          style={{
+                            background: "oklch(0.94 0.03 60 / 0.7)",
+                            border: "1px solid oklch(0.85 0.06 55 / 0.3)",
+                          }}
+                        >
+                          <span
+                            className="text-sm font-medium"
+                            style={{ color: "oklch(0.38 0.12 55)" }}
                           >
+                            {entry.label}
+                          </span>
+                          <div className="flex items-center gap-2">
                             <span
-                              className="text-sm font-medium"
-                              style={{ color: "oklch(0.38 0.12 55)" }}
+                              className="text-sm font-bold"
+                              style={{ color: "oklch(0.42 0.16 50)" }}
                             >
-                              {entry.label}
+                              ₹{entry.amount.toLocaleString("en-IN")}
                             </span>
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="text-sm font-bold"
-                                style={{ color: "oklch(0.42 0.16 50)" }}
-                              >
-                                ₹{entry.amount.toLocaleString("en-IN")}
-                              </span>
-                              <button
-                                type="button"
-                                data-ocid={`income.delete_button.${idx + 1}`}
-                                onClick={() => handleDeleteIncomeEntry(idx)}
-                                className="text-xs px-2 py-1 rounded-lg transition-colors hover:opacity-80"
-                                style={{
-                                  background: "oklch(0.88 0.06 25 / 0.4)",
-                                  color: "oklch(0.45 0.15 25)",
-                                }}
-                              >
-                                ✕
-                              </button>
-                            </div>
+                            <button
+                              type="button"
+                              data-ocid={`income.delete_button.${idx + 1}`}
+                              onClick={() => handleDeleteIncomeEntry(idx)}
+                              className="text-xs px-2 py-1 rounded-lg"
+                              style={{
+                                background: "oklch(0.88 0.06 25 / 0.4)",
+                                color: "oklch(0.45 0.15 25)",
+                              }}
+                            >
+                              ✕
+                            </button>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                    {incomeEntries.length === 0 && (
-                      <p
-                        className="text-xs text-center py-1"
-                        style={{ color: "oklch(0.65 0.06 55)" }}
-                      >
-                        No entries yet — add your income sources above
-                      </p>
-                    )}
-
-                    {/* Income display */}
-                    <div
-                      className="p-4 rounded-xl"
-                      style={{
-                        background:
-                          "linear-gradient(135deg, oklch(0.94 0.04 55), oklch(0.92 0.05 50))",
-                        border: "1px solid oklch(0.82 0.06 55 / 0.4)",
-                      }}
-                    >
-                      <p
-                        className="text-xs font-medium uppercase tracking-wider"
-                        style={{ color: "oklch(0.58 0.1 55)" }}
-                      >
-                        Current Income
-                      </p>
-                      <p
-                        className="font-display text-3xl font-bold mt-1"
-                        style={{ color: "oklch(0.38 0.16 50)" }}
-                      >
-                        ₹{monthlyIncome.toLocaleString("en-IN")}
-                      </p>
-                    </div>
-
-                    {/* Goal progress */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span style={{ color: "oklch(0.5 0.08 55)" }}>
-                          Monthly Goal
-                        </span>
-                        <span
-                          className="font-semibold"
-                          style={{ color: "oklch(0.42 0.14 50)" }}
-                        >
-                          ₹{INCOME_GOAL.toLocaleString("en-IN")}
-                        </span>
-                      </div>
-                      <div className="career-progress">
-                        <Progress
-                          value={incomeGoalPct}
-                          className="h-3 rounded-full"
-                          style={{ background: "oklch(0.88 0.03 55 / 0.4)" }}
-                        />
-                      </div>
-                      <p
-                        className="text-xs text-right"
-                        style={{ color: "oklch(0.58 0.1 55)" }}
-                      >
-                        {incomeGoalPct}% of goal reached
-                      </p>
-                    </div>
-
-                    {/* Income milestone message */}
-                    <div
-                      className="text-center py-2 px-3 rounded-lg text-sm"
-                      style={{
-                        background: "oklch(0.92 0.04 60 / 0.6)",
-                        color: "oklch(0.45 0.12 55)",
-                      }}
-                    >
-                      {incomeGoalPct >= 100
-                        ? "🎉 Goal achieved! Congratulations!"
-                        : incomeGoalPct >= 75
-                          ? "📈 Almost there! Great progress!"
-                          : incomeGoalPct >= 50
-                            ? "💪 Halfway to your goal!"
-                            : incomeGoalPct > 0
-                              ? "🌱 Keep growing your teaching practice!"
-                              : "✨ Enter your monthly earnings above"}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Quick stats */}
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    {
-                      label: "Active Students",
-                      value: checkedItems.students.length,
-                      icon: "👥",
-                    },
-                    {
-                      label: "Certs Earned",
-                      value: checkedItems.certificates.length,
-                      icon: "🎓",
-                    },
-                  ].map((stat) => (
-                    <div
-                      key={stat.label}
-                      className="rounded-xl p-4 text-center"
-                      style={{
-                        background:
-                          "linear-gradient(135deg, oklch(0.96 0.03 60), oklch(0.94 0.04 50))",
-                        border: "1px solid oklch(0.85 0.04 55 / 0.5)",
-                      }}
-                    >
-                      <div className="text-2xl mb-1">{stat.icon}</div>
-                      <div
-                        className="font-display text-2xl font-bold"
-                        style={{ color: "oklch(0.38 0.16 50)" }}
-                      >
-                        {stat.value}
-                      </div>
-                      <div
-                        className="text-xs mt-0.5"
-                        style={{ color: "oklch(0.58 0.1 55)" }}
-                      >
-                        {stat.label}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          </TabsContent>
-
-          {/* ──────────────── DAILY TAB ──────────────── */}
-          <TabsContent value="daily" className="space-y-5 mt-6">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.4 }}
-              className="grid gap-5 md:grid-cols-[1fr_260px]"
-            >
-              {/* Daily Task Planner */}
-              <Card className="card-journal rounded-2xl border-0">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle
-                      className="font-display text-xl"
-                      style={{ color: "oklch(0.32 0.15 225)" }}
-                    >
-                      📅 Daily Planner
-                    </CardTitle>
-                    <Badge
-                      className="rounded-full text-xs px-2.5"
-                      style={{
-                        background: "oklch(0.5 0.18 225 / 0.1)",
-                        color: "oklch(0.42 0.15 225)",
-                        border: "1px solid oklch(0.6 0.15 225 / 0.3)",
-                      }}
-                    >
-                      {dailyTasks.filter((t) => t.done).length}/
-                      {dailyTasks.length} done
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {/* Add task input */}
-                  <div className="flex gap-2">
-                    <Input
-                      data-ocid="daily.todo.input"
-                      placeholder="Add a new task for today..."
-                      value={taskInput}
-                      onChange={(e) => setTaskInput(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addTask()}
-                      className="flex-1 rounded-xl border-0"
-                      style={{
-                        background: "oklch(0.94 0.022 225 / 0.5)",
-                        color: "oklch(0.25 0.05 225)",
-                      }}
-                    />
-                    <Button
-                      data-ocid="daily.todo.add_button"
-                      onClick={addTask}
-                      className="rounded-xl px-4 shrink-0"
-                      style={{
-                        background: "oklch(0.5 0.18 225)",
-                        color: "white",
-                      }}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-
-                  {/* Task list */}
-                  {dailyTasks.length === 0 ? (
-                    <div
-                      data-ocid="daily.todo.empty_state"
-                      className="text-center py-10 rounded-xl"
-                      style={{ background: "oklch(0.96 0.018 225 / 0.5)" }}
-                    >
-                      <p className="text-3xl mb-2">✨</p>
-                      <p
-                        className="font-medium"
-                        style={{ color: "oklch(0.5 0.1 225)" }}
-                      >
-                        Your day is a blank canvas
-                      </p>
-                      <p
-                        className="text-sm mt-1"
-                        style={{ color: "oklch(0.65 0.08 225)" }}
-                      >
-                        Add tasks to plan your productive day
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <AnimatePresence mode="popLayout">
-                        {dailyTasks.map((task, i) => (
-                          <motion.div
-                            key={task.description || i}
-                            initial={{ opacity: 0, x: -16 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 16, height: 0 }}
-                            transition={{ duration: 0.25 }}
-                            data-ocid={`daily.todo.item.${i + 1}`}
-                            className="flex items-center gap-3 p-3 rounded-xl group transition-all"
-                            style={{
-                              background: task.done
-                                ? "oklch(0.5 0.18 225 / 0.08)"
-                                : "oklch(0.96 0.018 225 / 0.5)",
-                              border: `1px solid ${task.done ? "oklch(0.6 0.15 225 / 0.25)" : "oklch(0.88 0.022 225 / 0.5)"}`,
-                            }}
-                          >
-                            <Checkbox
-                              data-ocid={
-                                i === 0 ? "daily.todo.checkbox.1" : undefined
-                              }
-                              checked={task.done}
-                              onCheckedChange={() => toggleTask(i)}
-                              id={`task-${i}`}
-                            />
-                            <label
-                              htmlFor={`task-${i}`}
-                              className="flex-1 text-sm cursor-pointer leading-snug"
-                              style={{
-                                color: task.done
-                                  ? "oklch(0.6 0.1 225)"
-                                  : "oklch(0.28 0.04 75)",
-                                textDecoration: task.done
-                                  ? "line-through"
-                                  : "none",
-                                opacity: task.done ? 0.7 : 1,
-                              }}
-                            >
-                              {task.description}
-                            </label>
-                            <button
-                              type="button"
-                              data-ocid={
-                                i === 0
-                                  ? "daily.todo.delete_button.1"
-                                  : undefined
-                              }
-                              onClick={() => deleteTask(i)}
-                              className="opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-opacity"
-                              style={{ color: "oklch(0.58 0.2 25)" }}
-                              aria-label="Delete task"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
+                        </div>
+                      ))}
                     </div>
                   )}
-
-                  {/* Daily progress bar */}
-                  {dailyTasks.length > 0 && (
-                    <div className="pt-1 daily-progress">
+                  <div
+                    className="p-4 rounded-xl"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, oklch(0.94 0.04 55), oklch(0.92 0.05 50))",
+                      border: "1px solid oklch(0.82 0.06 55 / 0.4)",
+                    }}
+                  >
+                    <p
+                      className="text-xs font-medium uppercase tracking-wider"
+                      style={{ color: "oklch(0.58 0.1 55)" }}
+                    >
+                      Monthly Total
+                    </p>
+                    <p
+                      className="font-display text-3xl font-bold mt-1"
+                      style={{ color: "oklch(0.38 0.16 50)" }}
+                    >
+                      ₹{monthlyIncome.toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-sm">
+                      <span style={{ color: "oklch(0.5 0.08 55)" }}>
+                        Monthly Goal
+                      </span>
+                      <span
+                        className="font-semibold"
+                        style={{ color: "oklch(0.42 0.14 50)" }}
+                      >
+                        ₹{INCOME_GOAL.toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                    <div className="career-progress">
                       <Progress
-                        value={pct(
-                          dailyTasks.filter((t) => t.done).length,
-                          dailyTasks.length,
-                        )}
-                        className="h-2 rounded-full"
-                        style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
+                        value={incomeGoalPct}
+                        className="h-3 rounded-full"
+                        style={{ background: "oklch(0.88 0.03 55 / 0.4)" }}
                       />
                     </div>
-                  )}
+                    <p
+                      className="text-xs text-right"
+                      style={{ color: "oklch(0.58 0.1 55)" }}
+                    >
+                      {incomeGoalPct}% of goal reached
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
-
-              {/* Daily Goals */}
-              <Card className="card-journal rounded-2xl border-0">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle
-                      className="font-display text-xl"
-                      style={{ color: "oklch(0.32 0.15 225)" }}
-                    >
-                      🎯 Daily Goals
-                    </CardTitle>
-                    <Badge
-                      className="rounded-full text-xs px-2.5"
-                      style={{
-                        background: "oklch(0.5 0.18 225 / 0.1)",
-                        color: "oklch(0.42 0.15 225)",
-                        border: "1px solid oklch(0.6 0.15 225 / 0.3)",
-                      }}
-                    >
-                      {dailyGoals.filter((g) => g.done).length}/
-                      {dailyGoals.length} done
-                    </Badge>
-                  </div>
-                  {dailyGoals.length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      <Progress
-                        value={pct(
-                          dailyGoals.filter((g) => g.done).length,
-                          dailyGoals.length,
-                        )}
-                        className="h-2 rounded-full"
-                        style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
-                      />
-                      <p
-                        className="text-xs"
-                        style={{ color: "oklch(0.52 0.1 225)" }}
-                      >
-                        {dailyGoals.filter((g) => g.done).length} of{" "}
-                        {dailyGoals.length} goals completed
-                      </p>
-                    </div>
-                  )}
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex gap-2">
-                    <Input
-                      data-ocid="daily_goals.input"
-                      placeholder="Add a goal for today..."
-                      value={goalInput}
-                      onChange={(e) => setGoalInput(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addDailyGoal()}
-                      className="flex-1 rounded-xl border-0"
-                      style={{
-                        background: "oklch(0.94 0.022 225 / 0.5)",
-                        color: "oklch(0.25 0.05 225)",
-                      }}
-                    />
-                    <Button
-                      data-ocid="daily_goals.add_button"
-                      onClick={addDailyGoal}
-                      className="rounded-xl px-4 shrink-0"
-                      style={{
-                        background: "oklch(0.5 0.18 225)",
-                        color: "white",
-                      }}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  {dailyGoals.length === 0 ? (
-                    <div
-                      data-ocid="daily_goals.empty_state"
-                      className="text-center py-8 rounded-xl"
-                      style={{ background: "oklch(0.96 0.018 225 / 0.5)" }}
-                    >
-                      <p className="text-2xl mb-2">🎯</p>
-                      <p
-                        className="font-medium"
-                        style={{ color: "oklch(0.5 0.1 225)" }}
-                      >
-                        No goals yet — add one above!
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <AnimatePresence mode="popLayout">
-                        {dailyGoals.map((goal, i) => (
-                          <motion.div
-                            key={goal.id}
-                            initial={{ opacity: 0, x: -16 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 16, height: 0 }}
-                            transition={{ duration: 0.25 }}
-                            data-ocid={`daily_goals.item.${i + 1}`}
-                            className="flex items-center gap-3 p-3 rounded-xl group transition-all"
-                            style={{
-                              background: goal.done
-                                ? "oklch(0.5 0.18 225 / 0.08)"
-                                : "oklch(0.96 0.018 225 / 0.5)",
-                              border: `1px solid ${goal.done ? "oklch(0.6 0.15 225 / 0.25)" : "oklch(0.88 0.022 225 / 0.5)"}`,
-                            }}
-                          >
-                            <Checkbox
-                              data-ocid={`daily_goals.checkbox.${i + 1}`}
-                              checked={goal.done}
-                              onCheckedChange={() => toggleDailyGoal(goal.id)}
-                              id={`goal-${goal.id}`}
-                            />
-                            <label
-                              htmlFor={`goal-${goal.id}`}
-                              className="flex-1 text-sm cursor-pointer leading-snug"
-                              style={{
-                                color: goal.done
-                                  ? "oklch(0.6 0.1 225)"
-                                  : "oklch(0.28 0.04 75)",
-                                textDecoration: goal.done
-                                  ? "line-through"
-                                  : "none",
-                                opacity: goal.done ? 0.7 : 1,
-                              }}
-                            >
-                              {goal.text}
-                            </label>
-                            <button
-                              type="button"
-                              data-ocid={`daily_goals.delete_button.${i + 1}`}
-                              onClick={() => deleteDailyGoal(goal.id)}
-                              className="opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-opacity"
-                              style={{ color: "oklch(0.58 0.2 25)" }}
-                              aria-label="Delete goal"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Daily Goals */}
-              <Card className="card-journal rounded-2xl border-0">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle
-                      className="font-display text-xl"
-                      style={{ color: "oklch(0.32 0.15 225)" }}
-                    >
-                      🎯 Daily Goals
-                    </CardTitle>
-                    <Badge
-                      className="rounded-full text-xs px-2.5"
-                      style={{
-                        background: "oklch(0.5 0.18 225 / 0.1)",
-                        color: "oklch(0.42 0.15 225)",
-                        border: "1px solid oklch(0.6 0.15 225 / 0.3)",
-                      }}
-                    >
-                      {dailyGoals.filter((g) => g.done).length}/
-                      {dailyGoals.length} done
-                    </Badge>
-                  </div>
-                  {dailyGoals.length > 0 && (
-                    <div className="mt-2 space-y-1">
-                      <Progress
-                        value={pct(
-                          dailyGoals.filter((g) => g.done).length,
-                          dailyGoals.length,
-                        )}
-                        className="h-2 rounded-full"
-                        style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
-                      />
-                      <p
-                        className="text-xs"
-                        style={{ color: "oklch(0.52 0.1 225)" }}
-                      >
-                        {dailyGoals.filter((g) => g.done).length} of{" "}
-                        {dailyGoals.length} goals completed
-                      </p>
-                    </div>
-                  )}
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex gap-2">
-                    <Input
-                      data-ocid="daily_goals.input"
-                      placeholder="Add a goal for today..."
-                      value={goalInput}
-                      onChange={(e) => setGoalInput(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addDailyGoal()}
-                      className="flex-1 rounded-xl border-0"
-                      style={{
-                        background: "oklch(0.94 0.022 225 / 0.5)",
-                        color: "oklch(0.25 0.05 225)",
-                      }}
-                    />
-                    <Button
-                      data-ocid="daily_goals.add_button"
-                      onClick={addDailyGoal}
-                      className="rounded-xl px-4 shrink-0"
-                      style={{
-                        background: "oklch(0.5 0.18 225)",
-                        color: "white",
-                      }}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  {dailyGoals.length === 0 ? (
-                    <div
-                      data-ocid="daily_goals.empty_state"
-                      className="text-center py-8 rounded-xl"
-                      style={{ background: "oklch(0.96 0.018 225 / 0.5)" }}
-                    >
-                      <p className="text-2xl mb-2">🎯</p>
-                      <p
-                        className="font-medium"
-                        style={{ color: "oklch(0.5 0.1 225)" }}
-                      >
-                        No goals yet — add one above!
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <AnimatePresence mode="popLayout">
-                        {dailyGoals.map((goal, i) => (
-                          <motion.div
-                            key={goal.id}
-                            initial={{ opacity: 0, x: -16 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: 16, height: 0 }}
-                            transition={{ duration: 0.25 }}
-                            data-ocid={`daily_goals.item.${i + 1}`}
-                            className="flex items-center gap-3 p-3 rounded-xl group transition-all"
-                            style={{
-                              background: goal.done
-                                ? "oklch(0.5 0.18 225 / 0.08)"
-                                : "oklch(0.96 0.018 225 / 0.5)",
-                              border: `1px solid ${goal.done ? "oklch(0.6 0.15 225 / 0.25)" : "oklch(0.88 0.022 225 / 0.5)"}`,
-                            }}
-                          >
-                            <Checkbox
-                              data-ocid={`daily_goals.checkbox.${i + 1}`}
-                              checked={goal.done}
-                              onCheckedChange={() => toggleDailyGoal(goal.id)}
-                              id={`goal-${goal.id}`}
-                            />
-                            <label
-                              htmlFor={`goal-${goal.id}`}
-                              className="flex-1 text-sm cursor-pointer leading-snug"
-                              style={{
-                                color: goal.done
-                                  ? "oklch(0.6 0.1 225)"
-                                  : "oklch(0.28 0.04 75)",
-                                textDecoration: goal.done
-                                  ? "line-through"
-                                  : "none",
-                                opacity: goal.done ? 0.7 : 1,
-                              }}
-                            >
-                              {goal.text}
-                            </label>
-                            <button
-                              type="button"
-                              data-ocid={`daily_goals.delete_button.${i + 1}`}
-                              onClick={() => deleteDailyGoal(goal.id)}
-                              className="opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-opacity"
-                              style={{ color: "oklch(0.58 0.2 25)" }}
-                              aria-label="Delete goal"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
               {/* Pomodoro Timer */}
               <div
                 className="rounded-2xl p-6 flex flex-col items-center gap-5"
@@ -3450,17 +2820,312 @@ function AppContent() {
               </div>
             </motion.div>
           </TabsContent>
+
+          {/* ──────────────── DAILY TAB ──────────────── */}
+          <TabsContent value="daily" className="space-y-5 mt-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4 }}
+              className="grid gap-5 md:grid-cols-[1fr_260px]"
+            >
+              {/* Daily Task Planner */}
+              <Card className="card-journal rounded-2xl border-0">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle
+                      className="font-display text-xl"
+                      style={{ color: "oklch(0.32 0.15 225)" }}
+                    >
+                      📅 Daily Planner
+                    </CardTitle>
+                    <Badge
+                      className="rounded-full text-xs px-2.5"
+                      style={{
+                        background: "oklch(0.5 0.18 225 / 0.1)",
+                        color: "oklch(0.42 0.15 225)",
+                        border: "1px solid oklch(0.6 0.15 225 / 0.3)",
+                      }}
+                    >
+                      {dailyTasks.filter((t) => t.done).length}/
+                      {dailyTasks.length} done
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      data-ocid="daily.todo.input"
+                      placeholder="Add a new task for today..."
+                      value={taskInput}
+                      onChange={(e) => setTaskInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addTask()}
+                      className="flex-1 rounded-xl border-0"
+                      style={{
+                        background: "oklch(0.94 0.022 225 / 0.5)",
+                        color: "oklch(0.25 0.05 225)",
+                      }}
+                    />
+                    <Button
+                      data-ocid="daily.todo.add_button"
+                      onClick={addTask}
+                      className="rounded-xl px-4 shrink-0"
+                      style={{
+                        background: "oklch(0.5 0.18 225)",
+                        color: "white",
+                      }}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {dailyTasks.length === 0 ? (
+                    <div
+                      data-ocid="daily.todo.empty_state"
+                      className="text-center py-10 rounded-xl"
+                      style={{ background: "oklch(0.96 0.018 225 / 0.5)" }}
+                    >
+                      <p className="text-3xl mb-2">✨</p>
+                      <p
+                        className="font-medium"
+                        style={{ color: "oklch(0.5 0.1 225)" }}
+                      >
+                        Your day is a blank canvas
+                      </p>
+                      <p
+                        className="text-sm mt-1"
+                        style={{ color: "oklch(0.65 0.08 225)" }}
+                      >
+                        Add tasks to plan your productive day
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <AnimatePresence mode="popLayout">
+                        {dailyTasks.map((task, i) => (
+                          <motion.div
+                            key={task.description || i}
+                            initial={{ opacity: 0, x: -16 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 16, height: 0 }}
+                            transition={{ duration: 0.25 }}
+                            data-ocid={`daily.todo.item.${i + 1}`}
+                            className="flex items-center gap-3 p-3 rounded-xl group transition-all"
+                            style={{
+                              background: task.done
+                                ? "oklch(0.5 0.18 225 / 0.08)"
+                                : "oklch(0.96 0.018 225 / 0.5)",
+                              border: `1px solid ${task.done ? "oklch(0.6 0.15 225 / 0.25)" : "oklch(0.88 0.022 225 / 0.5)"}`,
+                            }}
+                          >
+                            <Checkbox
+                              data-ocid={
+                                i === 0 ? "daily.todo.checkbox.1" : undefined
+                              }
+                              checked={task.done}
+                              onCheckedChange={() => toggleTask(i)}
+                              id={`task-${i}`}
+                            />
+                            <label
+                              htmlFor={`task-${i}`}
+                              className="flex-1 text-sm cursor-pointer leading-snug"
+                              style={{
+                                color: task.done
+                                  ? "oklch(0.6 0.1 225)"
+                                  : "oklch(0.28 0.04 75)",
+                                textDecoration: task.done
+                                  ? "line-through"
+                                  : "none",
+                                opacity: task.done ? 0.7 : 1,
+                              }}
+                            >
+                              {task.description}
+                            </label>
+                            <button
+                              type="button"
+                              data-ocid={
+                                i === 0
+                                  ? "daily.todo.delete_button.1"
+                                  : undefined
+                              }
+                              onClick={() => deleteTask(i)}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-opacity"
+                              style={{ color: "oklch(0.58 0.2 25)" }}
+                              aria-label="Delete task"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  )}
+                  {dailyTasks.length > 0 && (
+                    <div className="pt-1 daily-progress">
+                      <Progress
+                        value={pct(
+                          dailyTasks.filter((t) => t.done).length,
+                          dailyTasks.length,
+                        )}
+                        className="h-2 rounded-full"
+                        style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
+                      />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Daily Goals */}
+              <Card className="card-journal rounded-2xl border-0">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle
+                      className="font-display text-xl"
+                      style={{ color: "oklch(0.32 0.15 225)" }}
+                    >
+                      🎯 Daily Goals
+                    </CardTitle>
+                    <Badge
+                      className="rounded-full text-xs px-2.5"
+                      style={{
+                        background: "oklch(0.5 0.18 225 / 0.1)",
+                        color: "oklch(0.42 0.15 225)",
+                        border: "1px solid oklch(0.6 0.15 225 / 0.3)",
+                      }}
+                    >
+                      {dailyGoals.filter((g) => g.done).length}/
+                      {dailyGoals.length} done
+                    </Badge>
+                  </div>
+                  {dailyGoals.length > 0 && (
+                    <div className="mt-2">
+                      <Progress
+                        value={pct(
+                          dailyGoals.filter((g) => g.done).length,
+                          dailyGoals.length,
+                        )}
+                        className="h-2 rounded-full"
+                        style={{ background: "oklch(0.88 0.025 225 / 0.4)" }}
+                      />
+                    </div>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      data-ocid="daily_goals.input"
+                      placeholder="Add a goal for today..."
+                      value={goalInput}
+                      onChange={(e) => setGoalInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addDailyGoal()}
+                      className="flex-1 rounded-xl border-0"
+                      style={{
+                        background: "oklch(0.94 0.022 225 / 0.5)",
+                        color: "oklch(0.25 0.05 225)",
+                      }}
+                    />
+                    <Button
+                      data-ocid="daily_goals.add_button"
+                      onClick={addDailyGoal}
+                      className="rounded-xl px-4 shrink-0"
+                      style={{
+                        background: "oklch(0.5 0.18 225)",
+                        color: "white",
+                      }}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {dailyGoals.length === 0 ? (
+                    <div
+                      data-ocid="daily_goals.empty_state"
+                      className="text-center py-8 rounded-xl"
+                      style={{ background: "oklch(0.96 0.018 225 / 0.5)" }}
+                    >
+                      <p className="text-2xl mb-2">🎯</p>
+                      <p
+                        className="font-medium"
+                        style={{ color: "oklch(0.5 0.1 225)" }}
+                      >
+                        No goals yet — add one above!
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <AnimatePresence mode="popLayout">
+                        {dailyGoals.map((goal, i) => (
+                          <motion.div
+                            key={goal.id}
+                            initial={{ opacity: 0, x: -16 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, x: 16, height: 0 }}
+                            transition={{ duration: 0.25 }}
+                            data-ocid={`daily_goals.item.${i + 1}`}
+                            className="flex items-center gap-3 p-3 rounded-xl group transition-all"
+                            style={{
+                              background: goal.done
+                                ? "oklch(0.5 0.18 225 / 0.08)"
+                                : "oklch(0.96 0.018 225 / 0.5)",
+                              border: `1px solid ${goal.done ? "oklch(0.6 0.15 225 / 0.25)" : "oklch(0.88 0.022 225 / 0.5)"}`,
+                            }}
+                          >
+                            <Checkbox
+                              data-ocid={`daily_goals.checkbox.${i + 1}`}
+                              checked={goal.done}
+                              onCheckedChange={() => toggleDailyGoal(goal.id)}
+                              id={`goal-${goal.id}`}
+                            />
+                            <label
+                              htmlFor={`goal-${goal.id}`}
+                              className="flex-1 text-sm cursor-pointer leading-snug"
+                              style={{
+                                color: goal.done
+                                  ? "oklch(0.6 0.1 225)"
+                                  : "oklch(0.28 0.04 75)",
+                                textDecoration: goal.done
+                                  ? "line-through"
+                                  : "none",
+                                opacity: goal.done ? 0.7 : 1,
+                              }}
+                            >
+                              {goal.text}
+                            </label>
+                            <button
+                              type="button"
+                              data-ocid={`daily_goals.delete_button.${i + 1}`}
+                              onClick={() => deleteDailyGoal(goal.id)}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded-lg transition-opacity"
+                              style={{ color: "oklch(0.58 0.2 25)" }}
+                              aria-label="Delete goal"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          </TabsContent>
         </Tabs>
       </main>
 
       {/* ──────────────── ACHIEVEMENT BADGES ──────────────── */}
-      {!focusMode && (
-        <AchievementBadges
-          riyalahStreak={riyalahStreak}
-          booksCompleted={checkedItems.mABooks.length}
-          certsCompleted={checkedItems.certificates.length}
-          studentsCount={students.length}
-        />
+      {!focusMode && (viewMode === "dashboard" || viewMode === "review") && (
+        <CollapsibleSection
+          id="achievements"
+          title="Achievements"
+          icon="🏆"
+          defaultOpen={false}
+        >
+          <EditableAchievements
+            riyalahStreak={riyalahStreak}
+            booksCompleted={checkedItems.mABooks.length}
+            certsCompleted={checkedItems.certificates.length}
+            studentsCount={students.length}
+          />
+        </CollapsibleSection>
       )}
 
       {/* ──────────────── MONTHLY WINS + MONTHLY REPORT ──────────────── */}
@@ -3489,10 +3154,19 @@ function AppContent() {
       {!focusMode && <EmergencyResetButton />}
 
       {/* ──────────────── VISION SECTION ──────────────── */}
-      {!focusMode && <VisionSection />}
+      {!focusMode && viewMode === "dashboard" && (
+        <CollapsibleSection
+          id="vision"
+          title="Vision Section"
+          icon="✨"
+          defaultOpen={false}
+        >
+          <VisionSection />
+        </CollapsibleSection>
+      )}
 
       {/* ──────────────── FUTURE AYSHA MESSAGE ──────────────── */}
-      {!focusMode && <FutureAyshaMessage />}
+      {!focusMode && viewMode === "dashboard" && <FutureAyshaMessage />}
 
       {/* ──────────────── LIFE TIMELINE ──────────────── */}
       {!focusMode && <LifeTimeline />}
